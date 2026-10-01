@@ -1,0 +1,619 @@
+<Page
+    x:Class="KuroBBS.SearchPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:helpers="using:KuroBBS.Helpers"
+    xmlns:models="using:KuroBBS.Models"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+
+    <Page.BottomAppBar>
+        <CommandBar x:Name="SearchCommandBar" Background="#121216" ClosedDisplayMode="Minimal" IsOpen="False">
+            <AppBarButton Icon="Filter" Label="筛选" Click="OnOpenFilterDrawerClick" />
+            <AppBarButton Icon="Refresh" Label="刷新" Command="{Binding RefreshCommand}" />
+        </CommandBar>
+    </Page.BottomAppBar>
+
+    <Page.Resources>
+        <!-- Focused & Edit Theme Brush Overrides to prevent Whiteout / Inversion -->
+        <SolidColorBrush x:Key="TextBoxFocusedBackgroundThemeBrush" Color="#22222E" />
+        <SolidColorBrush x:Key="TextBoxFocusedForegroundThemeBrush" Color="#FFFFFF" />
+        <SolidColorBrush x:Key="TextBoxFocusedBorderThemeBrush" Color="#00E5FF" />
+        <SolidColorBrush x:Key="TextBoxBackgroundThemeBrush" Color="#16161C" />
+        <SolidColorBrush x:Key="TextBoxForegroundThemeBrush" Color="#FFFFFF" />
+        <SolidColorBrush x:Key="TextBoxPlaceholderTextThemeBrush" Color="#7E7E8E" />
+        <SolidColorBrush x:Key="PhoneTextBoxEditBackgroundBrush" Color="#22222E" />
+        <SolidColorBrush x:Key="PhoneTextBoxEditBorderBrush" Color="#00E5FF" />
+
+        <!-- Dark Metro TextBox Style -->
+        <Style x:Key="MetroDarkTextBoxStyle" TargetType="TextBox">
+            <Setter Property="MinWidth" Value="80" />
+            <Setter Property="MinHeight" Value="42" />
+            <Setter Property="Height" Value="42" />
+            <Setter Property="Foreground" Value="#FFFFFF" />
+            <Setter Property="Background" Value="#16161C" />
+            <Setter Property="BorderBrush" Value="#2E2E3C" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="Padding" Value="10,6" />
+            <Setter Property="SelectionHighlightColor" Value="{StaticResource MetroAccentBrush}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Grid Background="Transparent">
+                            <VisualStateManager.VisualStateGroups>
+                                <VisualStateGroup x:Name="CommonStates">
+                                    <VisualState x:Name="Normal" />
+                                    <VisualState x:Name="Disabled">
+                                        <Storyboard>
+                                            <ObjectAnimationUsingKeyFrames Storyboard.TargetName="BorderElement" Storyboard.TargetProperty="Background">
+                                                <DiscreteObjectKeyFrame KeyTime="0" Value="#121218" />
+                                            </ObjectAnimationUsingKeyFrames>
+                                            <ObjectAnimationUsingKeyFrames Storyboard.TargetName="ContentElement" Storyboard.TargetProperty="Foreground">
+                                                <DiscreteObjectKeyFrame KeyTime="0" Value="#666670" />
+                                            </ObjectAnimationUsingKeyFrames>
+                                        </Storyboard>
+                                    </VisualState>
+                                    <VisualState x:Name="PointerOver" />
+                                    <VisualState x:Name="Pressed" />
+                                </VisualStateGroup>
+                                <VisualStateGroup x:Name="FocusStates">
+                                    <VisualState x:Name="Focused">
+                                        <Storyboard>
+                                            <ObjectAnimationUsingKeyFrames Storyboard.TargetName="BorderElement" Storyboard.TargetProperty="BorderBrush">
+                                                <DiscreteObjectKeyFrame KeyTime="0" Value="#00E5FF" />
+                                            </ObjectAnimationUsingKeyFrames>
+                                            <ObjectAnimationUsingKeyFrames Storyboard.TargetName="BorderElement" Storyboard.TargetProperty="Background">
+                                                <DiscreteObjectKeyFrame KeyTime="0" Value="#22222E" />
+                                            </ObjectAnimationUsingKeyFrames>
+                                            <ObjectAnimationUsingKeyFrames Storyboard.TargetName="ContentElement" Storyboard.TargetProperty="Foreground">
+                                                <DiscreteObjectKeyFrame KeyTime="0" Value="#FFFFFF" />
+                                            </ObjectAnimationUsingKeyFrames>
+                                        </Storyboard>
+                                    </VisualState>
+                                    <VisualState x:Name="Unfocused" />
+                                </VisualStateGroup>
+                            </VisualStateManager.VisualStateGroups>
+                            <Border x:Name="BorderElement"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="{TemplateBinding BorderThickness}">
+                                <ScrollViewer x:Name="ContentElement"
+                                              AutomationProperties.AccessibilityView="Raw"
+                                              HorizontalScrollMode="{TemplateBinding ScrollViewer.HorizontalScrollMode}"
+                                              HorizontalScrollBarVisibility="{TemplateBinding ScrollViewer.HorizontalScrollBarVisibility}"
+                                              VerticalScrollMode="{TemplateBinding ScrollViewer.VerticalScrollMode}"
+                                              VerticalScrollBarVisibility="{TemplateBinding ScrollViewer.VerticalScrollBarVisibility}"
+                                              IsHorizontalRailEnabled="{TemplateBinding ScrollViewer.IsHorizontalRailEnabled}"
+                                              IsVerticalRailEnabled="{TemplateBinding ScrollViewer.IsVerticalRailEnabled}"
+                                              IsDeferredScrollingEnabled="{TemplateBinding ScrollViewer.IsDeferredScrollingEnabled}"
+                                              Margin="{TemplateBinding Padding}"
+                                              MinHeight="{TemplateBinding MinHeight}" />
+                            </Border>
+                            <TextBlock x:Name="PlaceholderTextContentPresenter"
+                                       Text="{TemplateBinding PlaceholderText}"
+                                       Foreground="#7E7E8E"
+                                       FontSize="{TemplateBinding FontSize}"
+                                       Margin="12,0,0,0"
+                                       IsHitTestVisible="False"
+                                       VerticalAlignment="Center"
+                                       Visibility="Collapsed" />
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- Native Metro RadioButton Style for Filter Drawer -->
+        <Style x:Key="MetroFilterRadioButtonStyle" TargetType="RadioButton">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="#D0D0D8" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Margin" Value="0,3,16,3" />
+        </Style>
+
+        <!-- Standard ListView Item Style with Card Spacing (Identical to MainPage) -->
+        <Style x:Key="MetroCardListViewItemStyle" TargetType="ListViewItem">
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Margin" Value="0,0,0,10" />
+            <Setter Property="Padding" Value="0" />
+        </Style>
+
+        <!-- Rich Metro Post Item Template (Reused from MainPage) -->
+        <DataTemplate x:Key="MetroPostItemTemplate">
+            <Border Background="{StaticResource MetroCardBackgroundBrush}" Padding="14" BorderBrush="#2C2C34" BorderThickness="1">
+                <StackPanel>
+                    <!-- Author Row -->
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <!-- User Avatar with Disk & Memory Cache (Tap for Profile) -->
+                        <Border Grid.Column="0" Width="36" Height="36" Margin="0,0,10,0" Background="#282832" Tapped="OnAuthorTapped" Tag="{Binding Author}">
+                            <Grid>
+                                <TextBlock Text="K" HorizontalAlignment="Center" VerticalAlignment="Center" FontWeight="Bold" Foreground="#8E8E93" />
+                                <Ellipse Width="36" Height="36">
+                                    <Ellipse.Fill>
+                                        <ImageBrush ImageSource="{Binding Author.AvatarUrl, Converter={StaticResource ImageCacheConverter}}" Stretch="UniformToFill" />
+                                    </Ellipse.Fill>
+                                </Ellipse>
+                            </Grid>
+                        </Border>
+
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Tapped="OnAuthorTapped" Tag="{Binding Author}">
+                            <TextBlock Text="{Binding Author.UserName}" FontWeight="SemiBold" FontSize="14" Foreground="White" />
+                            <TextBlock Text="{Binding PostTimeStr}" FontSize="11" Foreground="{StaticResource MetroSubTextBrush}" />
+                        </StackPanel>
+
+                        <Border Grid.Column="2" Background="#282832" Padding="6,2" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding GameName}" FontSize="10" Foreground="{StaticResource MetroAccentBrush}" />
+                        </Border>
+                    </Grid>
+
+                    <!-- Post Title -->
+                    <TextBlock Text="{Binding Title}" FontSize="15" FontWeight="Bold" Foreground="White" Margin="0,0,0,4" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" />
+
+                    <!-- Post Content Summary -->
+                    <TextBlock Text="{Binding ContentSummary}" FontSize="13" Foreground="#C8C8CE" Margin="0,0,0,8" TextWrapping="Wrap" MaxLines="3" TextTrimming="CharacterEllipsis" LineHeight="18" />
+
+                    <!-- Cached Cover Image with Dynamic Metro Skeleton Layer -->
+                    <Border Visibility="{Binding HasCover, Converter={StaticResource BoolToVis}}" MaxHeight="180" Margin="0,0,0,8" Background="#16161E">
+                        <Grid>
+                            <Border Background="#22222C" Height="140">
+                                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,20">
+                                    <ProgressBar IsIndeterminate="True" Width="130" Foreground="{StaticResource MetroAccentBrush}" Opacity="0.75" Margin="0,0,0,8" />
+                                    <TextBlock Text="正在载入图片..." FontSize="10" Foreground="{StaticResource MetroSubTextBrush}" HorizontalAlignment="Center" Opacity="0.6" />
+                                </StackPanel>
+                            </Border>
+                            <Image Source="{Binding CoverUrl, Converter={StaticResource ImageCacheConverter}}" Stretch="UniformToFill" />
+                        </Grid>
+                    </Border>
+
+                    <!-- Action Stats Bar -->
+                    <Grid Margin="0,4,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.Column="0" Text="{Binding Author.IpRegion}" FontSize="11" Foreground="{StaticResource MetroSubTextBrush}" VerticalAlignment="Center" />
+
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="0,0,16,0" VerticalAlignment="Center">
+                            <TextBlock Text="♥ " Foreground="{StaticResource MetroAccentBrush}" FontSize="12" />
+                            <TextBlock Text="{Binding LikeCount}" FontSize="12" Foreground="{StaticResource MetroSubTextBrush}" />
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="💬 " Foreground="{StaticResource MetroAccentBrush}" FontSize="12" />
+                            <TextBlock Text="{Binding CommentCount}" FontSize="12" Foreground="{StaticResource MetroSubTextBrush}" />
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+    </Page.Resources>
+
+    <Grid>
+        <!-- Native Progress Bar -->
+        <ProgressBar VerticalAlignment="Top" IsIndeterminate="{Binding IsBusy}"
+                     Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}"
+                     Foreground="{StaticResource MetroAccentBrush}" Canvas.ZIndex="99" />
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <!-- Row 0: Top Search Bar -->
+                <RowDefinition Height="Auto" />
+                <!-- Row 1: Main Content (Pre-Search or Search Results Pivot) -->
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <!-- Row 0: Top Search Bar (Game Picker + Search Input + Cancel Button) -->
+            <Grid Grid.Row="0" Margin="12,12,12,10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <!-- Left: Game Switcher (战双 / 鸣潮) -->
+                <Button Grid.Column="0" Background="#1C1C24" BorderBrush="#2E2E3C" BorderThickness="1"
+                        Height="42" Padding="10,0" Margin="0,0,8,0" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding GameName}" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource MetroAccentBrush}" VerticalAlignment="Center" />
+                        <TextBlock Text=" ▾" FontSize="11" Foreground="{StaticResource MetroSubTextBrush}" VerticalAlignment="Center" Margin="2,0,0,0" />
+                    </StackPanel>
+                    <Button.Flyout>
+                        <MenuFlyout>
+                            <MenuFlyoutItem Text="战双帕弥什" Click="OnSelectZhanshuangClick" />
+                            <MenuFlyoutItem Text="鸣潮" Click="OnSelectMingchaoClick" />
+                        </MenuFlyout>
+                    </Button.Flyout>
+                </Button>
+
+                <!-- Center: Search Input Box with Custom Dark Theme Style -->
+                <TextBox x:Name="SearchInputBox" Grid.Column="1" Text="{Binding Keyword, Mode=TwoWay}"
+                         PlaceholderText="{Binding DefaultWord}"
+                         InputScope="Search"
+                         KeyDown="OnSearchInputKeyDown"
+                         TextChanged="OnSearchInputTextChanged"
+                         Style="{StaticResource MetroDarkTextBoxStyle}"
+                         VerticalAlignment="Center" />
+
+                <!-- Right: Cancel / Clear Button -->
+                <Button Grid.Column="2" Click="OnCancelClick" Background="Transparent" BorderThickness="0"
+                        Height="42" Padding="10,0" Margin="4,0,0,0" VerticalAlignment="Center">
+                    <TextBlock Text="取消" FontSize="14" Foreground="{StaticResource MetroSubTextBrush}" VerticalAlignment="Center" />
+                </Button>
+            </Grid>
+
+            <!-- Row 1: VIEW A - Pre-Search State (Recent Searches, Hot Searches, Topic Hotlist) -->
+            <ScrollViewer Grid.Row="1" Visibility="{Binding ShowPreSearch, Converter={StaticResource BoolToVis}}" VerticalScrollBarVisibility="Auto">
+                <StackPanel Margin="12,6,12,24">
+                    <!-- 1. Recent Searches (本地持久化搜索词) -->
+                    <StackPanel Visibility="{Binding HasRecentSearches, Converter={StaticResource BoolToVis}}" Margin="0,0,0,16">
+                        <Grid Margin="0,0,0,8">
+                            <TextBlock Text="最近搜索" FontSize="13" FontWeight="Bold" Foreground="White" VerticalAlignment="Center" />
+                            <HyperlinkButton Click="OnClearRecentSearchesClick" HorizontalAlignment="Right" Padding="6,2">
+                                <TextBlock Text="清空" FontSize="11" Foreground="{StaticResource MetroSubTextBrush}" />
+                            </HyperlinkButton>
+                        </Grid>
+                        <GridView ItemsSource="{Binding RecentSearches}"
+                                  SelectionMode="None" IsItemClickEnabled="True" ItemClick="OnRecentSearchItemClick">
+                            <GridView.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="#1E1E26" BorderBrush="#2E2E3C" BorderThickness="1" Padding="10,6" Margin="0,0,8,8">
+                                        <TextBlock Text="{Binding}" FontSize="12" Foreground="#D0D0D8" />
+                                    </Border>
+                                </DataTemplate>
+                            </GridView.ItemTemplate>
+                        </GridView>
+                    </StackPanel>
+
+                    <!-- 2. Hot Search List (搜索发现 / 热点) -->
+                    <StackPanel Margin="0,0,0,16">
+                        <TextBlock Text="热点发现" FontSize="13" FontWeight="Bold" Foreground="White" Margin="0,0,0,8" />
+                        <GridView ItemsSource="{Binding HotSearchList}"
+                                  SelectionMode="None" IsItemClickEnabled="True" ItemClick="OnHotSearchItemClick">
+                            <GridView.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="#1A1A22" BorderBrush="#2E2E3C" BorderThickness="1" Padding="10,6" Margin="0,0,8,8">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="🔥" FontSize="10" Margin="0,0,4,0" VerticalAlignment="Center" />
+                                            <TextBlock Text="{Binding KeyWord}" FontSize="12" Foreground="White" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </GridView.ItemTemplate>
+                        </GridView>
+                    </StackPanel>
+
+                    <!-- 3. Topic Hotlist (话题热榜 with Top 1, Top 2, Top 3) -->
+                    <StackPanel Margin="0,0,0,16">
+                        <TextBlock Text="话题热榜" FontSize="13" FontWeight="Bold" Foreground="White" Margin="0,0,0,8" />
+                        <ListView ItemsSource="{Binding TopicHotList}"
+                                  SelectionMode="None" IsItemClickEnabled="True" ItemClick="OnTopicListItemClick"
+                                  ItemContainerStyle="{StaticResource MetroCardListViewItemStyle}">
+                            <ListView.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="{StaticResource MetroCardBackgroundBrush}" BorderBrush="#2C2C34" BorderThickness="1" Padding="12">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="36" />
+                                                <ColumnDefinition Width="44" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+
+                                            <!-- Rank Badge -->
+                                            <TextBlock Grid.Column="0" Text="{Binding RankNumberText}" FontSize="16" FontWeight="Bold"
+                                                       Foreground="{Binding IsTopThree, Converter={StaticResource BoolToActiveBrush}}"
+                                                       VerticalAlignment="Center" HorizontalAlignment="Center" />
+
+                                            <!-- Topic Icon -->
+                                            <Border Grid.Column="1" Width="40" Height="40" Background="#141418" BorderBrush="#333340" BorderThickness="1" VerticalAlignment="Center">
+                                                <Image Source="{Binding TopicIcon, Converter={StaticResource ImageCacheConverter}}" Stretch="UniformToFill" />
+                                            </Border>
+
+                                            <!-- Topic Details -->
+                                            <StackPanel Grid.Column="2" Margin="10,0,0,0" VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding TopicName, Converter={StaticResource StringFormatConverter}, ConverterParameter='# {0}'}"
+                                                           FontSize="14" FontWeight="Bold" Foreground="White" TextTrimming="CharacterEllipsis" />
+                                                <TextBlock Text="{Binding Remark}" FontSize="11" Foreground="{StaticResource MetroSubTextBrush}" TextTrimming="CharacterEllipsis" Margin="0,2,0,0" />
+                                            </StackPanel>
+
+                                            <!-- Stats -->
+                                            <TextBlock Grid.Column="3" Text="{Binding DiscussCountText}" FontSize="11" Foreground="{StaticResource MetroSubTextBrush}" VerticalAlignment="Center" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+                    </StackPanel>
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- Row 1: VIEW B - Search Results Native Pivot (Full Width matching MainPage) -->
+            <Pivot x:Name="SearchPivot" Grid.Row="1"
+                   Visibility="{Binding ShowResults, Converter={StaticResource BoolToVis}}"
+                   SelectedIndex="{Binding SelectedTabIndex, Mode=TwoWay}"
+                   SelectionChanged="OnSearchPivotSelectionChanged"
+                   Margin="0">
+
+                <Pivot.HeaderTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding}" FontSize="20" FontWeight="SemiBold" Margin="0,0,14,0" />
+                    </DataTemplate>
+                </Pivot.HeaderTemplate>
+
+                <!-- 1. 综合 Tab (Wiki Entries + Posts) -->
+                <PivotItem Header="综合" Margin="0">
+                    <ListView x:Name="CompositeListView"
+                              ItemsSource="{Binding CompositePosts}"
+                              SelectionMode="None" IsItemClickEnabled="True" ItemClick="OnPostItemClick"
+                              ItemTemplate="{StaticResource MetroPostItemTemplate}"
+                              ItemContainerStyle="{StaticResource MetroCardListViewItemStyle}"
+                              Loaded="OnCompositeListViewLoaded">
+                        <ListView.Header>
+                            <!-- Wiki Results Header Section in Composite Tab -->
+                            <StackPanel Visibility="{Binding HasCompositeWikis, Converter={StaticResource BoolToVis}}" Margin="0,0,0,12">
+                                <TextBlock Text="Wiki 词条" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource MetroAccentBrush}" Margin="0,0,0,6" />
+                                <ItemsControl ItemsSource="{Binding CompositeWikis}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Background="{StaticResource MetroCardBackgroundBrush}" BorderBrush="#2C2C34" BorderThickness="1" Padding="12" Margin="0,0,0,8">
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="44" />
+                                                        <ColumnDefinition Width="*" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <Border Grid.Column="0" Width="40" Height="40" Background="#141418">
+                                                        <Image Source="{Binding CoverImgUrl, Converter={StaticResource ImageCacheConverter}}" Stretch="UniformToFill" />
+                                                    </Border>
+                                                    <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding CleanTitle}" FontSize="13" FontWeight="Bold" Foreground="White" />
+                                                        <TextBlock Text="{Binding Catalogue}" FontSize="11" Foreground="{StaticResource MetroSubTextBrush}" Margin="0,2,0,0" />
+                                                    </StackPanel>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <TextBlock Text="相关帖子" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource MetroSubTextBrush}" Margin="0,8,0,0" />
+                            </StackPanel>
+                        </ListView.Header>
+                        <ListView.Footer>
+                            <StackPanel Margin="0,8,0,24">
+                                <ProgressRing IsActive="{Binding IsLoadingMore}" Visibility="{Binding IsLoadingMore, Converter={StaticResource BoolToVis}}" Foreground="{StaticResource MetroAccentBrush}" HorizontalAlignment="Center" Width="20" Height="20" />
+                                <TextBlock Text="{Binding StatusMessage}" Visibility="{Binding StatusMessage, Converter={StaticResource NullToVis}}" FontSize="12" Foreground="{StaticResource MetroSubTextBrush}" HorizontalAlignment="Center" Margin="0,12,0,0" />
+                            </StackPanel>
+                        </ListView.Footer>
+                    </ListView>
+                </PivotItem>
+
+                <!-- 2. 攻略 Tab -->
+                <PivotItem Header="攻略" Margin="0">
+                    <ListView x:Name="StrategyListView"
+                              ItemsSource="{Binding StrategyPosts}"
+                              SelectionMode="None" IsItemClickEnabled="True" ItemClick="OnPostItemClick"
+                              ItemTemplate="{StaticResource MetroPostItemTemplate}"
+                              ItemContainerStyle="{StaticResource MetroCardListViewItemStyle}"
+                              Loaded="OnStrategyListViewLoaded">
+                        <ListView.Footer>
+                            <StackPanel Margin="0,8,0,24">
+                                <ProgressRing IsActive="{Binding IsLoadingMore}" Visibility="{Binding IsLoadingMore, Converter={StaticResource BoolToVis}}" Foreground="{StaticResource MetroAccentBrush}" HorizontalAlignment="Center" Width="20" Height="20" />
+                                <TextBlock Text="{Binding StatusMessage}" Visibility="{Binding StatusMessage, Converter={StaticResource NullToVis}}" FontSize="12" Foreground="{StaticResource MetroSubTextBrush}" HorizontalAlignment="Center" Margin="0,12,0,0" />
+                            </StackPanel>
+                        </ListView.Footer>
+                    </ListView>
+                </PivotItem>
+
+                <!-- 3. 同人 Tab -->
+                <PivotItem Header="同人" Margin="0">
+                    <ListView x:Name="FanartListView"
+                              ItemsSource="{Binding FanartPosts}"
+                              SelectionMode="None" IsItemClickEnabled="True" ItemClick="OnPostItemClick"
+                              ItemTemplate="{StaticResource MetroPostItemTemplate}"
+                              ItemContainerStyle="{StaticResource MetroCardListViewItemStyle}"
+                              Loaded="OnFanartListViewLoaded">
+                        <ListView.Footer>
+                            <StackPanel Margin="0,8,0,24">
+                                <ProgressRing IsActive="{Binding IsLoadingMore}" Visibility="{Binding IsLoadingMore, Converter={StaticResource BoolToVis}}" Foreground="{StaticResource MetroAccentBrush}" HorizontalAlignment="Center" Width="20" Height="20" />
+                                <TextBlock Text="{Binding StatusMessage}" Visibility="{Binding StatusMessage, Converter={StaticResource NullToVis}}" FontSize="12" Foreground="{StaticResource MetroSubTextBrush}" HorizontalAlignment="Center" Margin="0,12,0,0" />
+                            </StackPanel>
+                        </ListView.Footer>
+                    </ListView>
+                </PivotItem>
+
+                <!-- 4. Wiki Tab -->
+                <PivotItem Header="Wiki" Margin="0">
+                    <ListView x:Name="WikiListView"
+                              ItemsSource="{Binding WikiResults}"
+                              SelectionMode="None"
+                              ItemContainerStyle="{StaticResource MetroCardListViewItemStyle}"
+                              Loaded="OnWikiListViewLoaded">
+                        <ListView.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="{StaticResource MetroCardBackgroundBrush}" BorderBrush="#2C2C34" BorderThickness="1" Padding="14">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="48" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <Border Grid.Column="0" Width="44" Height="44" Background="#141418">
+                                            <Image Source="{Binding CoverImgUrl, Converter={StaticResource ImageCacheConverter}}" Stretch="UniformToFill" />
+                                        </Border>
+                                        <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding CleanTitle}" FontSize="14" FontWeight="Bold" Foreground="White" />
+                                            <TextBlock Text="{Binding Catalogue}" FontSize="11" Foreground="{StaticResource MetroSubTextBrush}" Margin="0,2,0,0" />
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                        <ListView.Footer>
+                            <StackPanel Margin="0,8,0,24">
+                                <ProgressRing IsActive="{Binding IsLoadingMore}" Visibility="{Binding IsLoadingMore, Converter={StaticResource BoolToVis}}" Foreground="{StaticResource MetroAccentBrush}" HorizontalAlignment="Center" Width="20" Height="20" />
+                                <TextBlock Text="{Binding StatusMessage}" Visibility="{Binding StatusMessage, Converter={StaticResource NullToVis}}" FontSize="12" Foreground="{StaticResource MetroSubTextBrush}" HorizontalAlignment="Center" Margin="0,12,0,0" />
+                            </StackPanel>
+                        </ListView.Footer>
+                    </ListView>
+                </PivotItem>
+
+                <!-- 5. 话题 Tab -->
+                <PivotItem Header="话题" Margin="0">
+                    <ListView x:Name="TopicListView"
+                              ItemsSource="{Binding TopicResults}"
+                              SelectionMode="None" IsItemClickEnabled="True" ItemClick="OnTopicListItemClick"
+                              ItemContainerStyle="{StaticResource MetroCardListViewItemStyle}"
+                              Loaded="OnTopicListViewLoaded">
+                        <ListView.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="{StaticResource MetroCardBackgroundBrush}" BorderBrush="#2C2C34" BorderThickness="1" Padding="14">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="44" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <Border Grid.Column="0" Width="40" Height="40" Background="#141418" BorderBrush="#333340" BorderThickness="1">
+                                            <Image Source="{Binding TopicIcon, Converter={StaticResource ImageCacheConverter}}" Stretch="UniformToFill" />
+                                        </Border>
+                                        <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding TopicName, Converter={StaticResource StringFormatConverter}, ConverterParameter='# {0}'}"
+                                                       FontSize="14" FontWeight="Bold" Foreground="White" />
+                                            <TextBlock Text="{Binding Remark}" FontSize="11" Foreground="{StaticResource MetroSubTextBrush}" TextTrimming="CharacterEllipsis" Margin="0,2,0,0" />
+                                        </StackPanel>
+                                        <TextBlock Grid.Column="2" Text="{Binding DiscussCountText}" FontSize="11" Foreground="{StaticResource MetroSubTextBrush}" VerticalAlignment="Center" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                        <ListView.Footer>
+                            <StackPanel Margin="0,8,0,24">
+                                <ProgressRing IsActive="{Binding IsLoadingMore}" Visibility="{Binding IsLoadingMore, Converter={StaticResource BoolToVis}}" Foreground="{StaticResource MetroAccentBrush}" HorizontalAlignment="Center" Width="20" Height="20" />
+                                <TextBlock Text="{Binding StatusMessage}" Visibility="{Binding StatusMessage, Converter={StaticResource NullToVis}}" FontSize="12" Foreground="{StaticResource MetroSubTextBrush}" HorizontalAlignment="Center" Margin="0,12,0,0" />
+                            </StackPanel>
+                        </ListView.Footer>
+                    </ListView>
+                </PivotItem>
+
+                <!-- 6. 用户 Tab -->
+                <PivotItem Header="用户" Margin="0">
+                    <ListView x:Name="UserListView"
+                              ItemsSource="{Binding UserResults}"
+                              SelectionMode="None" IsItemClickEnabled="True" ItemClick="OnUserListItemClick"
+                              ItemContainerStyle="{StaticResource MetroCardListViewItemStyle}"
+                              Loaded="OnUserListViewLoaded">
+                        <ListView.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="{StaticResource MetroCardBackgroundBrush}" BorderBrush="#2C2C34" BorderThickness="1" Padding="14">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="44" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <Border Grid.Column="0" Width="40" Height="40" Background="#141418">
+                                            <Ellipse Width="40" Height="40">
+                                                <Ellipse.Fill>
+                                                    <ImageBrush ImageSource="{Binding HeadUrl, Converter={StaticResource ImageCacheConverter}}" Stretch="UniformToFill" />
+                                                </Ellipse.Fill>
+                                            </Ellipse>
+                                        </Border>
+                                        <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding UserName}" FontSize="14" FontWeight="Bold" Foreground="White" />
+                                            <TextBlock Text="{Binding Signature}" FontSize="11" Foreground="{StaticResource MetroSubTextBrush}" TextTrimming="CharacterEllipsis" Margin="0,2,0,0" />
+                                        </StackPanel>
+                                        <Border Grid.Column="2" Background="#1E1E24" BorderBrush="#333340" BorderThickness="1" Padding="8,4" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding FollowButtonLabel}" FontSize="11" Foreground="{StaticResource MetroAccentBrush}" />
+                                        </Border>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                        <ListView.Footer>
+                            <StackPanel Margin="0,8,0,24">
+                                <ProgressRing IsActive="{Binding IsLoadingMore}" Visibility="{Binding IsLoadingMore, Converter={StaticResource BoolToVis}}" Foreground="{StaticResource MetroAccentBrush}" HorizontalAlignment="Center" Width="20" Height="20" />
+                                <TextBlock Text="{Binding StatusMessage}" Visibility="{Binding StatusMessage, Converter={StaticResource NullToVis}}" FontSize="12" Foreground="{StaticResource MetroSubTextBrush}" HorizontalAlignment="Center" Margin="0,12,0,0" />
+                            </StackPanel>
+                        </ListView.Footer>
+                    </ListView>
+                </PivotItem>
+            </Pivot>
+
+            <!-- Filter Drawer Overlay (Native RadioButton Categories) -->
+            <Grid x:Name="FilterDrawerOverlay" Grid.Row="0" Grid.RowSpan="2" Background="#F5101014"
+                  Visibility="{Binding IsFilterDrawerOpen, Converter={StaticResource BoolToVis}}" Canvas.ZIndex="100">
+                <Grid Margin="16,20,16,20">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <!-- Drawer Header -->
+                    <Grid Grid.Row="0" Margin="0,0,0,14">
+                        <TextBlock Text="搜索筛选" FontSize="18" FontWeight="Light" Foreground="White" VerticalAlignment="Center" />
+                        <Button Click="OnCloseFilterDrawerClick" HorizontalAlignment="Right" Background="Transparent" Padding="6,2">
+                            <TextBlock Text="&#xE10A;" FontFamily="Segoe UI Symbol" FontSize="13" Foreground="{StaticResource MetroSubTextBrush}" />
+                        </Button>
+                    </Grid>
+
+                    <!-- Drawer Filter Options -->
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                        <StackPanel Margin="0,0,0,10">
+                            <!-- Category 1: 排序 (综合, 最多点赞, 最多收藏, 最新发布) -->
+                            <TextBlock Text="排序" FontSize="12" FontWeight="Bold" Foreground="{StaticResource MetroAccentBrush}" Margin="0,0,0,6" />
+                            <StackPanel Margin="0,0,0,14">
+                                <RadioButton GroupName="SearchSort" Content="综合" Tag="1" IsChecked="{Binding IsSortGeneral, Mode=OneWay}" Checked="OnSortRadioChecked" Style="{StaticResource MetroFilterRadioButtonStyle}" />
+                                <RadioButton GroupName="SearchSort" Content="最多点赞" Tag="2" IsChecked="{Binding IsSortLikes, Mode=OneWay}" Checked="OnSortRadioChecked" Style="{StaticResource MetroFilterRadioButtonStyle}" />
+                                <RadioButton GroupName="SearchSort" Content="最多收藏" Tag="3" IsChecked="{Binding IsSortCollects, Mode=OneWay}" Checked="OnSortRadioChecked" Style="{StaticResource MetroFilterRadioButtonStyle}" />
+                                <RadioButton GroupName="SearchSort" Content="最新发布" Tag="4" IsChecked="{Binding IsSortNewest, Mode=OneWay}" Checked="OnSortRadioChecked" Style="{StaticResource MetroFilterRadioButtonStyle}" />
+                            </StackPanel>
+
+                            <!-- Category 2: 内容类型 (全部, 长图文, 视频) -->
+                            <TextBlock Text="内容类型" FontSize="12" FontWeight="Bold" Foreground="{StaticResource MetroAccentBrush}" Margin="0,0,0,6" />
+                            <StackPanel Margin="0,0,0,14">
+                                <RadioButton GroupName="PostType" Content="全部" Tag="0" IsChecked="{Binding IsPostTypeAll, Mode=OneWay}" Checked="OnPostTypeRadioChecked" Style="{StaticResource MetroFilterRadioButtonStyle}" />
+                                <RadioButton GroupName="PostType" Content="长图文" Tag="1" IsChecked="{Binding IsPostTypeArticle, Mode=OneWay}" Checked="OnPostTypeRadioChecked" Style="{StaticResource MetroFilterRadioButtonStyle}" />
+                                <RadioButton GroupName="PostType" Content="视频" Tag="2" IsChecked="{Binding IsPostTypeVideo, Mode=OneWay}" Checked="OnPostTypeRadioChecked" Style="{StaticResource MetroFilterRadioButtonStyle}" />
+                            </StackPanel>
+
+                            <!-- Category 3: 发布时间 (全部, 1天内, 3天内, 7天内, 30天内) -->
+                            <TextBlock Text="发布时间" FontSize="12" FontWeight="Bold" Foreground="{StaticResource MetroAccentBrush}" Margin="0,0,0,6" />
+                            <StackPanel Margin="0,0,0,14">
+                                <RadioButton GroupName="SearchTime" Content="全部" Tag="0" IsChecked="{Binding IsTimeAll, Mode=OneWay}" Checked="OnTimeRadioChecked" Style="{StaticResource MetroFilterRadioButtonStyle}" />
+                                <RadioButton GroupName="SearchTime" Content="1天内" Tag="1" IsChecked="{Binding IsTime1Day, Mode=OneWay}" Checked="OnTimeRadioChecked" Style="{StaticResource MetroFilterRadioButtonStyle}" />
+                                <RadioButton GroupName="SearchTime" Content="3天内" Tag="3" IsChecked="{Binding IsTime3Days, Mode=OneWay}" Checked="OnTimeRadioChecked" Style="{StaticResource MetroFilterRadioButtonStyle}" />
+                                <RadioButton GroupName="SearchTime" Content="7天内" Tag="7" IsChecked="{Binding IsTime7Days, Mode=OneWay}" Checked="OnTimeRadioChecked" Style="{StaticResource MetroFilterRadioButtonStyle}" />
+                                <RadioButton GroupName="SearchTime" Content="30天内" Tag="30" IsChecked="{Binding IsTime30Days, Mode=OneWay}" Checked="OnTimeRadioChecked" Style="{StaticResource MetroFilterRadioButtonStyle}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <!-- Bottom 2 Buttons: 重置 & 收起 (Compact & Minimal) -->
+                    <Grid Grid.Row="2" Margin="0,8,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Button Grid.Column="0" Click="OnResetFiltersClick" HorizontalAlignment="Stretch" Margin="0,0,6,0"
+                                Background="#1A1A22" BorderBrush="#333340" BorderThickness="1" Padding="0,5">
+                            <TextBlock Text="重置" FontSize="11" Foreground="{StaticResource MetroSubTextBrush}" HorizontalAlignment="Center" />
+                        </Button>
+                        <Button Grid.Column="1" Click="OnApplyFiltersClick" HorizontalAlignment="Stretch" Margin="6,0,0,0"
+                                Background="{StaticResource MetroAccentBrush}" BorderThickness="0" Padding="0,5">
+                            <TextBlock Text="收起" FontSize="11" FontWeight="Bold" Foreground="White" HorizontalAlignment="Center" />
+                        </Button>
+                    </Grid>
+                </Grid>
+            </Grid>
+        </Grid>
+    </Grid>
+</Page>

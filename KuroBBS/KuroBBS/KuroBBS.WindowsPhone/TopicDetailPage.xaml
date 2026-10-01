@@ -1,0 +1,220 @@
+<Page
+    x:Class="KuroBBS.TopicDetailPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:helpers="using:KuroBBS.Helpers"
+    xmlns:models="using:KuroBBS.Models"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+
+    <Page.Resources>
+        <!-- Standard ListView Item Style with Card Spacing -->
+        <Style x:Key="MetroCardListViewItemStyle" TargetType="ListViewItem">
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Margin" Value="0,0,0,10" />
+            <Setter Property="Padding" Value="0" />
+        </Style>
+
+        <!-- Rich Metro Post Item Template (Reused from MainPage) -->
+        <DataTemplate x:Key="MetroPostItemTemplate">
+            <Border Background="{StaticResource MetroCardBackgroundBrush}" Padding="14" BorderBrush="#2C2C34" BorderThickness="1">
+                <StackPanel>
+                    <!-- Author Row -->
+                    <Grid Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <!-- User Avatar with Disk & Memory Cache (Tap for Profile) -->
+                        <Border Grid.Column="0" Width="36" Height="36" Margin="0,0,10,0" Background="#282832" Tapped="OnAuthorTapped" Tag="{Binding Author}">
+                            <Grid>
+                                <TextBlock Text="K" HorizontalAlignment="Center" VerticalAlignment="Center" FontWeight="Bold" Foreground="#8E8E93" />
+                                <Ellipse Width="36" Height="36">
+                                    <Ellipse.Fill>
+                                        <ImageBrush ImageSource="{Binding Author.AvatarUrl, Converter={StaticResource ImageCacheConverter}}" Stretch="UniformToFill" />
+                                    </Ellipse.Fill>
+                                </Ellipse>
+                            </Grid>
+                        </Border>
+
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Tapped="OnAuthorTapped" Tag="{Binding Author}">
+                            <TextBlock Text="{Binding Author.UserName}" FontWeight="SemiBold" FontSize="14" Foreground="White" />
+                            <TextBlock Text="{Binding PostTimeStr}" FontSize="11" Foreground="{StaticResource MetroSubTextBrush}" />
+                        </StackPanel>
+
+                        <Border Grid.Column="2" Background="#282832" Padding="6,2" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding GameName}" FontSize="10" Foreground="{StaticResource MetroAccentBrush}" />
+                        </Border>
+                    </Grid>
+
+                    <!-- Post Title -->
+                    <TextBlock Text="{Binding Title}" FontSize="15" FontWeight="Bold" Foreground="White" Margin="0,0,0,4" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" />
+
+                    <!-- Post Content Summary -->
+                    <TextBlock Text="{Binding ContentSummary}" FontSize="13" Foreground="#C8C8CE" Margin="0,0,0,8" TextWrapping="Wrap" MaxLines="3" TextTrimming="CharacterEllipsis" LineHeight="18" />
+
+                    <!-- Cached Cover Image with Dynamic Metro Skeleton Layer -->
+                    <Border Visibility="{Binding HasCover, Converter={StaticResource BoolToVis}}" MaxHeight="180" Margin="0,0,0,8" Background="#16161E">
+                        <Grid>
+                            <Border Background="#22222C" Height="140">
+                                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,20">
+                                    <ProgressBar IsIndeterminate="True" Width="130" Foreground="{StaticResource MetroAccentBrush}" Opacity="0.75" Margin="0,0,0,8" />
+                                    <TextBlock Text="正在载入图片..." FontSize="10" Foreground="{StaticResource MetroSubTextBrush}" HorizontalAlignment="Center" Opacity="0.6" />
+                                </StackPanel>
+                            </Border>
+                            <Image Source="{Binding CoverUrl, Converter={StaticResource ImageCacheConverter}}" Stretch="UniformToFill" />
+                        </Grid>
+                    </Border>
+
+                    <!-- Action Stats Bar -->
+                    <Grid Margin="0,4,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <TextBlock Grid.Column="0" Text="{Binding Author.IpRegion}" FontSize="11" Foreground="{StaticResource MetroSubTextBrush}" VerticalAlignment="Center" />
+
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="0,0,16,0" VerticalAlignment="Center">
+                            <TextBlock Text="♥ " Foreground="{StaticResource MetroAccentBrush}" FontSize="12" />
+                            <TextBlock Text="{Binding LikeCount}" FontSize="12" Foreground="{StaticResource MetroSubTextBrush}" />
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="💬 " Foreground="{StaticResource MetroAccentBrush}" FontSize="12" />
+                            <TextBlock Text="{Binding CommentCount}" FontSize="12" Foreground="{StaticResource MetroSubTextBrush}" />
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+    </Page.Resources>
+
+    <Grid>
+        <!-- Native Progress Bar -->
+        <ProgressBar VerticalAlignment="Top" IsIndeterminate="{Binding IsBusy}"
+                     Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}"
+                     Foreground="{StaticResource MetroAccentBrush}" Canvas.ZIndex="99" />
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <!-- Row 0: Top Nav Bar -->
+                <RowDefinition Height="Auto" />
+                <!-- Row 1: Topic Header Card -->
+                <RowDefinition Height="Auto" />
+                <!-- Row 2: Native Pivot (最新发布, 最新回复, 精选) -->
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <!-- Row 0: Top Nav Bar -->
+            <Grid Grid.Row="0" Margin="12,10,12,10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Button Grid.Column="0" Click="OnBackClick" Background="Transparent" BorderThickness="0" Padding="0,0,12,0" VerticalAlignment="Center">
+                    <TextBlock Text="&#xE0A6;" FontFamily="Segoe UI Symbol" FontSize="18" Foreground="White" />
+                </Button>
+                <TextBlock Grid.Column="1" Text="话题详情" FontSize="18" FontWeight="SemiBold" Foreground="White" VerticalAlignment="Center" />
+            </Grid>
+
+            <!-- Row 1: Topic Header Info -->
+            <Border Grid.Row="1" Background="{StaticResource MetroCardBackgroundBrush}" BorderBrush="#2C2C36" BorderThickness="1" Padding="12" Margin="12,0,12,4">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="54" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Topic Icon / Cover -->
+                    <Border Grid.Column="0" Width="50" Height="50" Background="#141418" BorderBrush="#333340" BorderThickness="1" VerticalAlignment="Top">
+                        <Image Source="{Binding Topic.TopicIcon, Converter={StaticResource ImageCacheConverter}}" Stretch="UniformToFill" />
+                    </Border>
+
+                    <!-- Topic Details -->
+                    <StackPanel Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
+                        <TextBlock Text="{Binding Topic.TopicName, Converter={StaticResource StringFormatConverter}, ConverterParameter='# {0}'}"
+                                   FontSize="15" FontWeight="Bold" Foreground="White" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding Topic.Remark}" Visibility="{Binding Topic.Remark, Converter={StaticResource NullToVis}}"
+                                   FontSize="11" Foreground="{StaticResource MetroSubTextBrush}" TextWrapping="Wrap" Margin="0,4,0,0" />
+                        <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                            <TextBlock Text="{Binding Topic.DiscussNum, Converter={StaticResource StringFormatConverter}, ConverterParameter='讨论: {0}'}"
+                                       FontSize="10" Foreground="{StaticResource MetroAccentBrush}" Margin="0,0,12,0" />
+                            <TextBlock Text="{Binding Topic.BrowseNum, Converter={StaticResource StringFormatConverter}, ConverterParameter='浏览: {0}'}"
+                                       FontSize="10" Foreground="{StaticResource MetroSubTextBrush}" />
+                        </StackPanel>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- Row 2: Native Pivot for Topic Tabs -->
+            <Pivot x:Name="TopicPivot" Grid.Row="2"
+                   SelectedIndex="{Binding SelectedTabIndex, Mode=TwoWay}"
+                   SelectionChanged="OnTopicPivotSelectionChanged"
+                   Margin="0">
+
+                <Pivot.HeaderTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding}" FontSize="20" FontWeight="SemiBold" Margin="0,0,14,0" />
+                    </DataTemplate>
+                </Pivot.HeaderTemplate>
+
+                <!-- 1. 最新发布 -->
+                <PivotItem Header="最新发布" Margin="0">
+                    <ListView x:Name="NewestListView"
+                              ItemsSource="{Binding NewestPosts}"
+                              SelectionMode="None" IsItemClickEnabled="True" ItemClick="OnPostItemClick"
+                              ItemTemplate="{StaticResource MetroPostItemTemplate}"
+                              ItemContainerStyle="{StaticResource MetroCardListViewItemStyle}"
+                              Loaded="OnListViewLoaded">
+                        <ListView.Footer>
+                            <StackPanel Margin="0,8,0,24">
+                                <ProgressRing IsActive="{Binding IsLoadingMore}" Visibility="{Binding IsLoadingMore, Converter={StaticResource BoolToVis}}" Foreground="{StaticResource MetroAccentBrush}" HorizontalAlignment="Center" Width="20" Height="20" />
+                                <TextBlock Text="{Binding StatusMessage}" Visibility="{Binding StatusMessage, Converter={StaticResource NullToVis}}" FontSize="12" Foreground="{StaticResource MetroSubTextBrush}" HorizontalAlignment="Center" Margin="0,12,0,0" />
+                            </StackPanel>
+                        </ListView.Footer>
+                    </ListView>
+                </PivotItem>
+
+                <!-- 2. 最新回复 -->
+                <PivotItem Header="最新回复" Margin="0">
+                    <ListView x:Name="LatestReplyListView"
+                              ItemsSource="{Binding LatestReplyPosts}"
+                              SelectionMode="None" IsItemClickEnabled="True" ItemClick="OnPostItemClick"
+                              ItemTemplate="{StaticResource MetroPostItemTemplate}"
+                              ItemContainerStyle="{StaticResource MetroCardListViewItemStyle}"
+                              Loaded="OnListViewLoaded">
+                        <ListView.Footer>
+                            <StackPanel Margin="0,8,0,24">
+                                <ProgressRing IsActive="{Binding IsLoadingMore}" Visibility="{Binding IsLoadingMore, Converter={StaticResource BoolToVis}}" Foreground="{StaticResource MetroAccentBrush}" HorizontalAlignment="Center" Width="20" Height="20" />
+                                <TextBlock Text="{Binding StatusMessage}" Visibility="{Binding StatusMessage, Converter={StaticResource NullToVis}}" FontSize="12" Foreground="{StaticResource MetroSubTextBrush}" HorizontalAlignment="Center" Margin="0,12,0,0" />
+                            </StackPanel>
+                        </ListView.Footer>
+                    </ListView>
+                </PivotItem>
+
+                <!-- 3. 精选 -->
+                <PivotItem Header="精选" Margin="0">
+                    <ListView x:Name="FeaturedListView"
+                              ItemsSource="{Binding FeaturedPosts}"
+                              SelectionMode="None" IsItemClickEnabled="True" ItemClick="OnPostItemClick"
+                              ItemTemplate="{StaticResource MetroPostItemTemplate}"
+                              ItemContainerStyle="{StaticResource MetroCardListViewItemStyle}"
+                              Loaded="OnListViewLoaded">
+                        <ListView.Footer>
+                            <StackPanel Margin="0,8,0,24">
+                                <ProgressRing IsActive="{Binding IsLoadingMore}" Visibility="{Binding IsLoadingMore, Converter={StaticResource BoolToVis}}" Foreground="{StaticResource MetroAccentBrush}" HorizontalAlignment="Center" Width="20" Height="20" />
+                                <TextBlock Text="{Binding StatusMessage}" Visibility="{Binding StatusMessage, Converter={StaticResource NullToVis}}" FontSize="12" Foreground="{StaticResource MetroSubTextBrush}" HorizontalAlignment="Center" Margin="0,12,0,0" />
+                            </StackPanel>
+                        </ListView.Footer>
+                    </ListView>
+                </PivotItem>
+            </Pivot>
+        </Grid>
+    </Grid>
+</Page>

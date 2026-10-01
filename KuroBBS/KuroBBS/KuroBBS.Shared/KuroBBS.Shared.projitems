@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <MSBuildAllProjects>$(MSBuildAllProjects);$(MSBuildThisFileFullPath)</MSBuildAllProjects>
+    <HasSharedItems>true</HasSharedItems>
+    <SharedGUID>49e0258e-10e9-4832-a416-4c7da7a61abf</SharedGUID>
+  </PropertyGroup>
+  <PropertyGroup Label="Configuration">
+    <Import_RootNamespace>KuroBBS</Import_RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ApplicationDefinition Include="$(MSBuildThisFileDirectory)App.xaml">
+      <SubType>Designer</SubType>
+    </ApplicationDefinition>
+    <Compile Include="$(MSBuildThisFileDirectory)App.xaml.cs">
+      <DependentUpon>App.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="$(MSBuildThisFileDirectory)Models\KuroModels.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Models\HaruModels.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Helpers\RelayCommand.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Helpers\SettingsHelper.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Helpers\BackPressHelper.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Helpers\Converters.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Helpers\NotificationHelper.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Helpers\InlineRunsHelper.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Helpers\KuroGifHelper.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Helpers\KuroHtmlPostParser.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Helpers\KuroPostPublishHelper.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Helpers\IFileOpenPickerContinuable.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Services\KuroApiClient.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Services\NetworkActivity.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Services\KuroImageCache.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Services\KuroLogger.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Services\KuroForumService.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Services\KuroEmojiService.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Services\KuroSignInService.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Services\KuroUserService.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Services\KuroAuthService.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Services\KuroVideoService.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Services\KuroHlsEngine.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Services\HaruRoleService.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ViewModels\ViewModelBase.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ViewModels\MainViewModel.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ViewModels\CreatePostViewModel.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ViewModels\PostDetailViewModel.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ViewModels\UserProfileViewModel.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ViewModels\LoginViewModel.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ViewModels\DetailViewModel.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ViewModels\AllRoleViewModel.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ViewModels\CharacterDetailViewModel.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ViewModels\TeamRecommendationViewModel.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ViewModels\SearchViewModel.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ViewModels\TopicViewModel.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ViewModels\SettingsViewModel.cs" />
+  </ItemGroup>
+</Project>

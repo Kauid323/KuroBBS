@@ -1,0 +1,50 @@
+<Application
+    x:Class="KuroBBS.App"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:helpers="using:KuroBBS.Helpers"
+    xmlns:local="using:KuroBBS">
+
+    <Application.Resources>
+        <!-- Global XAML Converters -->
+        <helpers:BooleanToVisibilityConverter x:Key="BoolToVis" />
+        <helpers:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+        <helpers:InverseBooleanToVisibilityConverter x:Key="InvBoolToVis" />
+        <helpers:InverseBooleanToVisibilityConverter x:Key="InverseBooleanToVisibilityConverter" />
+        <helpers:InverseBooleanConverter x:Key="InvBoolConverter" />
+        <helpers:StringFormatConverter x:Key="StringFormatConverter" />
+        <helpers:ImageCacheConverter x:Key="ImageCacheConverter" />
+        <helpers:ImageCacheConverter x:Key="ImageCache" />
+        <helpers:BoolToActiveBrushConverter x:Key="BoolToActiveBrush" />
+        <helpers:BoolToFontWeightConverter x:Key="BoolToFontWeight" />
+        <helpers:NullToVisibilityConverter x:Key="NullToVis" />
+        <helpers:NullToVisibilityConverter x:Key="NullToVisibilityConverter" />
+        <helpers:InverseNullToVisibilityConverter x:Key="InvNullToVis" />
+        <helpers:InverseNullToVisibilityConverter x:Key="InverseNullToVisibilityConverter" />
+        <helpers:StringToSymbolIconConverter x:Key="StringToSymbolIconConverter" />
+        <helpers:StringToSymbolIconConverter x:Key="StringToSymbolIcon" />
+        <helpers:FollowStateToBackgroundConverter x:Key="FollowStateToBgConverter" />
+        <helpers:FollowStateToForegroundConverter x:Key="FollowStateToFgConverter" />
+        <helpers:BoolToAccentBrushConverter x:Key="BoolToAccentConverter" />
+        <helpers:BoolToTextBrushConverter x:Key="BoolToTextBrushConverter" />
+        <helpers:InverseBooleanToVisibilityConverter x:Key="InvertedBoolToVisConverter" />
+        <helpers:InverseBooleanToVisibilityConverter x:Key="BoolToCollapseConverter" />
+
+        <!-- Global Metro Modern Brushes -->
+        <SolidColorBrush x:Key="MetroAccentBrush" Color="#00A3FF" />
+        <SolidColorBrush x:Key="MetroCardBackgroundBrush" Color="#1E1E24" />
+        <SolidColorBrush x:Key="MetroSubTextBrush" Color="#8E8E93" />
+        <SolidColorBrush x:Key="MetroGoldBrush" Color="#FFB700" />
+
+        <!-- Global Dark TextBox Brush Overrides -->
+        <SolidColorBrush x:Key="TextBoxFocusedBackgroundThemeBrush" Color="#22222E" />
+        <SolidColorBrush x:Key="TextBoxFocusedForegroundThemeBrush" Color="#FFFFFF" />
+        <SolidColorBrush x:Key="TextBoxFocusedBorderThemeBrush" Color="#00E5FF" />
+        <SolidColorBrush x:Key="TextBoxBackgroundThemeBrush" Color="#16161C" />
+        <SolidColorBrush x:Key="TextBoxForegroundThemeBrush" Color="#FFFFFF" />
+        <SolidColorBrush x:Key="TextBoxPlaceholderTextThemeBrush" Color="#7E7E8E" />
+        <SolidColorBrush x:Key="PhoneTextBoxEditBackgroundBrush" Color="#22222E" />
+        <SolidColorBrush x:Key="PhoneTextBoxEditBorderBrush" Color="#00E5FF" />
+    </Application.Resources>
+
+</Application>

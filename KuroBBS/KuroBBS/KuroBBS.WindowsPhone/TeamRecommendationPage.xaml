@@ -1,0 +1,331 @@
+<Page
+    x:Class="KuroBBS.TeamRecommendationPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:helpers="using:KuroBBS.Helpers"
+    xmlns:models="using:KuroBBS.Models"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+
+    <Page.BottomAppBar>
+        <CommandBar Background="#121216" ClosedDisplayMode="Minimal" IsOpen="False">
+            <AppBarButton Icon="Back" Label="返回" Click="OnBackClick" />
+            <AppBarButton Icon="Contact" Label="更换角色" Click="OnToggleCharacterPickerClick" />
+            <AppBarButton Icon="Sort" Label="排序">
+                <AppBarButton.Flyout>
+                    <MenuFlyout>
+                        <MenuFlyoutItem Text="最热推荐" Click="OnSortHotClick" />
+                        <MenuFlyoutItem Text="最新方案" Click="OnSortNewClick" />
+                    </MenuFlyout>
+                </AppBarButton.Flyout>
+            </AppBarButton>
+            <AppBarButton Icon="Refresh" Label="刷新" Command="{Binding RefreshCommand}" />
+        </CommandBar>
+    </Page.BottomAppBar>
+
+    <Grid>
+        <!-- Native Progress Indicator -->
+        <ProgressBar VerticalAlignment="Top" IsIndeterminate="{Binding IsBusy}"
+                     Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}"
+                     Foreground="{StaticResource MetroAccentBrush}" Canvas.ZIndex="99" />
+
+        <Grid Margin="16,0,16,0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <!-- 1. Metro Page Header -->
+            <StackPanel Grid.Row="0" Margin="0,14,0,10">
+                <Grid>
+                    <TextBlock Text="战双帕弥什 · 阵容推荐" FontSize="11" Foreground="{StaticResource MetroSubTextBrush}" />
+                    <TextBlock Text="{Binding SortTypeText}" FontSize="11" Foreground="{StaticResource MetroAccentBrush}" HorizontalAlignment="Right" />
+                </Grid>
+                <Grid Margin="0,4,0,0">
+                    <TextBlock Text="{Binding CharacterDisplayName}" FontSize="26" FontWeight="Light" Foreground="White" VerticalAlignment="Center" />
+                    <Button Click="OnToggleCharacterPickerClick" HorizontalAlignment="Right" VerticalAlignment="Center"
+                            Background="#1A1A22" BorderBrush="#333340" BorderThickness="1" Padding="8,4">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="切换角色" FontSize="11" Foreground="#66CCFF" VerticalAlignment="Center" Margin="0,0,4,0" />
+                            <TextBlock Text="&#xE015;" FontFamily="Segoe UI Symbol" FontSize="10" Foreground="#66CCFF" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                </Grid>
+            </StackPanel>
+
+            <!-- 2. Mode Selector (Metro Segmented Buttons: 全部 / 纷争战区 / 幻痛囚笼) -->
+            <Grid Grid.Row="1" Margin="0,0,0,12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <!-- Mode 0: 全部 / 常规 -->
+                <Button Grid.Column="0" Click="OnModeAllClick" HorizontalAlignment="Stretch" Margin="0,0,4,0" Padding="0,7"
+                        Background="{Binding IsModeAll, Converter={StaticResource BoolToAccentConverter}}"
+                        BorderBrush="#333340" BorderThickness="1">
+                    <TextBlock Text="常规 / 全部" FontSize="12" FontWeight="SemiBold"
+                               Foreground="{Binding IsModeAll, Converter={StaticResource BoolToTextBrushConverter}}"
+                               HorizontalAlignment="Center" />
+                </Button>
+
+                <!-- Mode 1: 纷争战区 -->
+                <Button Grid.Column="1" Click="OnModeWarZoneClick" HorizontalAlignment="Stretch" Margin="2,0,2,0" Padding="0,7"
+                        Background="{Binding IsModeWarZone, Converter={StaticResource BoolToAccentConverter}}"
+                        BorderBrush="#333340" BorderThickness="1">
+                    <TextBlock Text="纷争战区" FontSize="12" FontWeight="SemiBold"
+                               Foreground="{Binding IsModeWarZone, Converter={StaticResource BoolToTextBrushConverter}}"
+                               HorizontalAlignment="Center" />
+                </Button>
+
+                <!-- Mode 2: 幻痛囚笼 -->
+                <Button Grid.Column="2" Click="OnModeBossClick" HorizontalAlignment="Stretch" Margin="4,0,0,0" Padding="0,7"
+                        Background="{Binding IsModeBoss, Converter={StaticResource BoolToAccentConverter}}"
+                        BorderBrush="#333340" BorderThickness="1">
+                    <TextBlock Text="幻痛囚笼" FontSize="12" FontWeight="SemiBold"
+                               Foreground="{Binding IsModeBoss, Converter={StaticResource BoolToTextBrushConverter}}"
+                               HorizontalAlignment="Center" />
+                </Button>
+            </Grid>
+
+            <!-- 3. Teams List -->
+            <ListView Grid.Row="2" ItemsSource="{Binding Teams}" SelectionMode="None">
+                <ListView.ItemContainerStyle>
+                    <Style TargetType="ListViewItem">
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                        <Setter Property="Margin" Value="0,0,0,12" />
+                        <Setter Property="Padding" Value="0" />
+                    </Style>
+                </ListView.ItemContainerStyle>
+                <ListView.ItemTemplate>
+                    <DataTemplate>
+                        <Border Background="{StaticResource MetroCardBackgroundBrush}" BorderBrush="#2C2C36" BorderThickness="1" Padding="12">
+                            <StackPanel>
+                                <!-- Card Header: Title & Tags -->
+                                <Grid Margin="0,0,0,10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- Team Title (e.g. 毕业队伍 / 新手推荐 / 过去3日最多出场) -->
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Border Background="#242430" BorderBrush="{StaticResource MetroAccentBrush}" BorderThickness="1" Padding="6,2" Margin="0,0,6,0">
+                                            <TextBlock Text="{Binding Title}" FontSize="12" FontWeight="Bold" Foreground="{StaticResource MetroAccentBrush}" />
+                                        </Border>
+                                    </StackPanel>
+
+                                    <!-- Tags list -->
+                                    <ItemsControl Grid.Column="1" ItemsSource="{Binding Tags}" VerticalAlignment="Center">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <StackPanel Orientation="Horizontal" />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Background="#141418" BorderBrush="#333340" BorderThickness="1" Padding="5,1" Margin="3,0,0,0">
+                                                    <TextBlock Text="{Binding Name}" FontSize="10" Foreground="{StaticResource MetroSubTextBrush}" />
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </Grid>
+
+                                <!-- 3 Member Character Slots (3-Column Grid) -->
+                                <Grid Margin="0,0,0,10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- Member 1 (红色位 / 队长位) -->
+                                    <Border Grid.Column="0" Margin="0,0,4,0" Background="#141418" BorderBrush="#2E2E3A" BorderThickness="1" Padding="4"
+                                            Visibility="{Binding Member1, Converter={StaticResource NullToVis}}">
+                                        <StackPanel DataContext="{Binding Member1}">
+                                            <Border Height="72" Background="#1A1A22" BorderBrush="#333340" BorderThickness="1">
+                                                <Grid>
+                                                    <Image Source="{Binding HeadUrl, Converter={StaticResource ImageCacheConverter}}" Stretch="UniformToFill" />
+                                                    <Border Visibility="{Binding HasGrade, Converter={StaticResource BoolToVis}}"
+                                                            HorizontalAlignment="Right" VerticalAlignment="Top"
+                                                            Background="#D0000000" Padding="4,1">
+                                                        <TextBlock Text="{Binding GradeText}" FontSize="10" FontWeight="Bold" Foreground="{StaticResource MetroGoldBrush}" />
+                                                    </Border>
+                                                    <Border HorizontalAlignment="Left" VerticalAlignment="Bottom" Background="#C0FF3B30" Padding="4,1">
+                                                        <TextBlock Text="队长" FontSize="9" FontWeight="Bold" Foreground="White" />
+                                                    </Border>
+                                                </Grid>
+                                            </Border>
+                                            <TextBlock Text="{Binding DisplayName}" FontSize="11" FontWeight="SemiBold" Foreground="White"
+                                                       HorizontalAlignment="Center" TextAlignment="Center" TextTrimming="CharacterEllipsis" Margin="0,4,0,0" />
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- Member 2 (蓝色位) -->
+                                    <Border Grid.Column="1" Margin="2,0,2,0" Background="#141418" BorderBrush="#2E2E3A" BorderThickness="1" Padding="4"
+                                            Visibility="{Binding Member2, Converter={StaticResource NullToVis}}">
+                                        <StackPanel DataContext="{Binding Member2}">
+                                            <Border Height="72" Background="#1A1A22" BorderBrush="#333340" BorderThickness="1">
+                                                <Grid>
+                                                    <Image Source="{Binding HeadUrl, Converter={StaticResource ImageCacheConverter}}" Stretch="UniformToFill" />
+                                                    <Border Visibility="{Binding HasGrade, Converter={StaticResource BoolToVis}}"
+                                                            HorizontalAlignment="Right" VerticalAlignment="Top"
+                                                            Background="#D0000000" Padding="4,1">
+                                                        <TextBlock Text="{Binding GradeText}" FontSize="10" FontWeight="Bold" Foreground="{StaticResource MetroGoldBrush}" />
+                                                    </Border>
+                                                    <Border HorizontalAlignment="Left" VerticalAlignment="Bottom" Background="#C0007AFF" Padding="4,1">
+                                                        <TextBlock Text="队员" FontSize="9" FontWeight="Bold" Foreground="White" />
+                                                    </Border>
+                                                </Grid>
+                                            </Border>
+                                            <TextBlock Text="{Binding DisplayName}" FontSize="11" FontWeight="SemiBold" Foreground="White"
+                                                       HorizontalAlignment="Center" TextAlignment="Center" TextTrimming="CharacterEllipsis" Margin="0,4,0,0" />
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- Member 3 (黄色位) -->
+                                    <Border Grid.Column="2" Margin="4,0,0,0" Background="#141418" BorderBrush="#2E2E3A" BorderThickness="1" Padding="4"
+                                            Visibility="{Binding Member3, Converter={StaticResource NullToVis}}">
+                                        <StackPanel DataContext="{Binding Member3}">
+                                            <Border Height="72" Background="#1A1A22" BorderBrush="#333340" BorderThickness="1">
+                                                <Grid>
+                                                    <Image Source="{Binding HeadUrl, Converter={StaticResource ImageCacheConverter}}" Stretch="UniformToFill" />
+                                                    <Border Visibility="{Binding HasGrade, Converter={StaticResource BoolToVis}}"
+                                                            HorizontalAlignment="Right" VerticalAlignment="Top"
+                                                            Background="#D0000000" Padding="4,1">
+                                                        <TextBlock Text="{Binding GradeText}" FontSize="10" FontWeight="Bold" Foreground="{StaticResource MetroGoldBrush}" />
+                                                    </Border>
+                                                    <Border HorizontalAlignment="Left" VerticalAlignment="Bottom" Background="#C0FFCC00" Padding="4,1">
+                                                        <TextBlock Text="队员" FontSize="9" FontWeight="Bold" Foreground="#1A1A1A" />
+                                                    </Border>
+                                                </Grid>
+                                            </Border>
+                                            <TextBlock Text="{Binding DisplayName}" FontSize="11" FontWeight="SemiBold" Foreground="White"
+                                                       HorizontalAlignment="Center" TextAlignment="Center" TextTrimming="CharacterEllipsis" Margin="0,4,0,0" />
+                                        </StackPanel>
+                                    </Border>
+                                </Grid>
+
+                                <!-- Card Footer: Author, Date, Stats -->
+                                <Border Background="#141418" Padding="8,5" BorderBrush="#262630" BorderThickness="1">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <!-- Author & Date -->
+                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding AuthorDisplayText}" FontSize="10" Foreground="#A0A0B0" />
+                                            <TextBlock Text=" · " FontSize="10" Foreground="{StaticResource MetroSubTextBrush}" Margin="2,0" />
+                                            <TextBlock Text="{Binding CreateDay}" FontSize="10" Foreground="{StaticResource MetroSubTextBrush}" />
+                                        </StackPanel>
+
+                                        <!-- Stats: Views & Likes -->
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                            <StackPanel Orientation="Horizontal" Margin="0,0,8,0">
+                                                <TextBlock Text="&#xE114;" FontFamily="Segoe UI Symbol" FontSize="10" Foreground="{StaticResource MetroSubTextBrush}" VerticalAlignment="Center" Margin="0,0,3,0" />
+                                                <TextBlock Text="{Binding ViewNumText}" FontSize="10" Foreground="{StaticResource MetroSubTextBrush}" VerticalAlignment="Center" />
+                                            </StackPanel>
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="&#xE006;" FontFamily="Segoe UI Symbol" FontSize="10" Foreground="{StaticResource MetroGoldBrush}" VerticalAlignment="Center" Margin="0,0,3,0" />
+                                                <TextBlock Text="{Binding LinkNumText}" FontSize="10" Foreground="{StaticResource MetroSubTextBrush}" VerticalAlignment="Center" />
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+
+                <!-- List Footer: Load More / Status -->
+                <ListView.Footer>
+                    <StackPanel Margin="0,8,0,24">
+                        <!-- Load More Button -->
+                        <Button Visibility="{Binding HasMore, Converter={StaticResource BoolToVis}}"
+                                Click="OnLoadMoreClick" HorizontalAlignment="Stretch" Background="#1A1A22" BorderBrush="#333340" BorderThickness="1" Padding="0,10">
+                            <Grid>
+                                <TextBlock Text="加载更多方案..." FontSize="12" Foreground="{StaticResource MetroAccentBrush}" HorizontalAlignment="Center"
+                                           Visibility="{Binding IsLoadingMore, Converter={StaticResource InvertedBoolToVisConverter}}" />
+                                <ProgressBar IsIndeterminate="True" Foreground="{StaticResource MetroAccentBrush}"
+                                             Visibility="{Binding IsLoadingMore, Converter={StaticResource BoolToVis}}" Height="4" />
+                            </Grid>
+                        </Button>
+
+                        <!-- Empty / Status Message -->
+                        <TextBlock Text="{Binding StatusMessage}" Visibility="{Binding StatusMessage, Converter={StaticResource NullToVis}}"
+                                   FontSize="12" Foreground="{StaticResource MetroSubTextBrush}" HorizontalAlignment="Center" Margin="0,12,0,0" />
+                    </StackPanel>
+                </ListView.Footer>
+            </ListView>
+
+            <!-- 4. Character Picker Drawer / Overlay (Metro Light Dismiss Popup/Grid) -->
+            <Grid x:Name="CharacterPickerOverlay" Grid.Row="0" Grid.RowSpan="3" Background="#F0101014"
+                  Visibility="Collapsed" Canvas.ZIndex="100">
+                <Grid Margin="16,24,16,24">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <StackPanel Grid.Row="0" Margin="0,0,0,12">
+                        <Grid>
+                            <TextBlock Text="选择构造体查看编队" FontSize="18" FontWeight="SemiBold" Foreground="White" VerticalAlignment="Center" />
+                            <Button Click="OnCloseCharacterPickerClick" HorizontalAlignment="Right" Background="Transparent" Padding="8,4">
+                                <TextBlock Text="&#xE10A;" FontFamily="Segoe UI Symbol" FontSize="14" Foreground="{StaticResource MetroSubTextBrush}" />
+                            </Button>
+                        </Grid>
+                        <TextBlock Text="点击选择需要查看编队推荐的构造体" FontSize="11" Foreground="{StaticResource MetroSubTextBrush}" Margin="0,2,0,0" />
+                    </StackPanel>
+
+                    <!-- Characters Grid/List -->
+                    <ListView Grid.Row="1" ItemsSource="{Binding FilterCharacters}" SelectionMode="None">
+                        <ListView.ItemContainerStyle>
+                            <Style TargetType="ListViewItem">
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                <Setter Property="Margin" Value="0,0,0,6" />
+                                <Setter Property="Padding" Value="0" />
+                            </Style>
+                        </ListView.ItemContainerStyle>
+                        <ListView.ItemTemplate>
+                            <DataTemplate>
+                                <Button Click="OnCharacterItemClick" HorizontalAlignment="Stretch" Background="#1E1E24" BorderBrush="#2C2C36" BorderThickness="1" Padding="10,6">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="40" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <Border Grid.Column="0" Width="36" Height="36" Background="#141418">
+                                            <Image Source="{Binding HeadUrl, Converter={StaticResource ImageCacheConverter}}" Stretch="UniformToFill" />
+                                        </Border>
+
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="10,0,0,0">
+                                            <TextBlock Text="{Binding DisplayName}" FontSize="13" FontWeight="SemiBold" Foreground="White" />
+                                            <TextBlock Text="{Binding AttributeName}" FontSize="10" Foreground="#66CCFF" Margin="0,2,0,0" />
+                                        </StackPanel>
+
+                                        <TextBlock Grid.Column="2" Text="{Binding Effect}" FontSize="10" Foreground="{StaticResource MetroGoldBrush}" VerticalAlignment="Center" />
+                                    </Grid>
+                                </Button>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+
+                    <Button Grid.Row="2" Click="OnCloseCharacterPickerClick" HorizontalAlignment="Stretch" Margin="0,12,0,0"
+                            Background="#1A1A22" BorderBrush="#333340" BorderThickness="1" Padding="0,8">
+                        <TextBlock Text="关闭" FontSize="12" Foreground="{StaticResource MetroSubTextBrush}" HorizontalAlignment="Center" />
+                    </Button>
+                </Grid>
+            </Grid>
+        </Grid>
+    </Grid>
+</Page>

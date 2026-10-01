@@ -1,0 +1,168 @@
+<Page
+    x:Class="KuroBBS.LoginPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:KuroBBS"
+    xmlns:helpers="using:KuroBBS.Helpers"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+
+    <Page.BottomAppBar>
+        <CommandBar x:Name="BottomBar" Background="#121216">
+            <AppBarButton Icon="Back" Label="返回" Click="OnBackClick" />
+        </CommandBar>
+    </Page.BottomAppBar>
+
+    <Grid>
+        <!-- Native Metro Progress Indicator -->
+        <ProgressBar VerticalAlignment="Top" IsIndeterminate="{Binding IsBusy}" Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" Foreground="{StaticResource MetroAccentBrush}" Canvas.ZIndex="999" />
+
+        <!-- Metro Pivot Login Container -->
+        <Pivot x:Name="LoginPivot" Title="库街区">
+            <Pivot.TitleTemplate>
+                <DataTemplate>
+                    <TextBlock Text="{Binding}" FontSize="12" Foreground="{StaticResource MetroSubTextBrush}" Margin="0,0,0,0" />
+                </DataTemplate>
+            </Pivot.TitleTemplate>
+            <Pivot.HeaderTemplate>
+                <DataTemplate>
+                    <TextBlock Text="{Binding}" FontSize="20" FontWeight="SemiBold" Margin="0,0,16,0" />
+                </DataTemplate>
+            </Pivot.HeaderTemplate>
+
+            <!-- Tab 1: 手机号登录 -->
+            <PivotItem Header="手机号登录" Margin="16,0,16,0">
+                <ScrollViewer>
+                    <StackPanel Margin="0,10,0,30">
+                        <TextBlock Text="手机号码" FontSize="12" Foreground="{StaticResource MetroSubTextBrush}" Margin="0,0,0,6" />
+                        <TextBox Text="{Binding Mobile, Mode=TwoWay}" 
+                                 InputScope="TelephoneNumber" 
+                                 PlaceholderText="请输入 11 位手机号码" 
+                                 Background="#16161E" 
+                                 Foreground="White" 
+                                 BorderBrush="#2C2C38" 
+                                 BorderThickness="1" 
+                                 Margin="0,0,0,14" />
+
+                        <TextBlock Text="短信验证码" FontSize="12" Foreground="{StaticResource MetroSubTextBrush}" Margin="0,0,0,6" />
+                        <Grid Margin="0,0,0,16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <TextBox Grid.Column="0" 
+                                     Text="{Binding SmsCode, Mode=TwoWay}" 
+                                     InputScope="Number" 
+                                     PlaceholderText="请输入短信验证码" 
+                                     Background="#16161E" 
+                                     Foreground="White" 
+                                     BorderBrush="#2C2C38" 
+                                     BorderThickness="1" 
+                                     Margin="0,0,10,0" />
+
+                            <Button Grid.Column="1" 
+                                    Content="{Binding CountdownText}" 
+                                    Command="{Binding RequestSmsCodeCommand}" 
+                                    IsEnabled="{Binding CanSendSms}" 
+                                    Background="#22222E" 
+                                    Foreground="{StaticResource MetroAccentBrush}" 
+                                    FontWeight="SemiBold" 
+                                    BorderThickness="0" 
+                                    Padding="14,8" />
+                        </Grid>
+
+                        <!-- Status Message -->
+                        <TextBlock Text="{Binding StatusMessage}" 
+                                   Visibility="{Binding HasStatusMessage, Converter={StaticResource BoolToVis}}" 
+                                   FontSize="12" 
+                                   Foreground="{StaticResource MetroAccentBrush}" 
+                                   TextWrapping="Wrap" 
+                                   Margin="0,0,0,14" />
+
+                        <Button Content="立即登录" 
+                                Command="{Binding LoginWithSmsCommand}" 
+                                HorizontalAlignment="Stretch" 
+                                Background="{StaticResource MetroAccentBrush}" 
+                                Foreground="White" 
+                                FontWeight="Bold" 
+                                FontSize="15" 
+                                Padding="0,12" 
+                                BorderThickness="0" />
+
+                        <TextBlock Text="提示：若遇到极验风控验证，可选择 Cookie / Token 方式登录。" 
+                                   FontSize="11" 
+                                   Foreground="{StaticResource MetroSubTextBrush}" 
+                                   TextWrapping="Wrap" 
+                                   Margin="0,16,0,0" />
+                    </StackPanel>
+                </ScrollViewer>
+            </PivotItem>
+
+            <!-- Tab 2: Cookie / Token 登录 -->
+            <PivotItem Header="Cookie 登录" Margin="16,0,16,0">
+                <ScrollViewer>
+                    <StackPanel Margin="0,10,0,30">
+                        <TextBlock Text="Token 或 Cookie 凭证" FontSize="12" Foreground="{StaticResource MetroSubTextBrush}" Margin="0,0,0,6" />
+                        
+                        <TextBox Text="{Binding TokenOrCookieInput, Mode=TwoWay}" 
+                                 PlaceholderText="请粘贴 Token 凭证或浏览器中完整的 Cookie 字符串..." 
+                                 Background="#16161E" 
+                                 Foreground="White" 
+                                 BorderBrush="#2C2C38" 
+                                 BorderThickness="1" 
+                                 AcceptsReturn="True" 
+                                 TextWrapping="Wrap" 
+                                 Height="110" 
+                                 Margin="0,0,0,14" />
+
+                        <!-- Status Message -->
+                        <TextBlock Text="{Binding StatusMessage}" 
+                                   Visibility="{Binding HasStatusMessage, Converter={StaticResource BoolToVis}}" 
+                                   FontSize="12" 
+                                   Foreground="{StaticResource MetroAccentBrush}" 
+                                   TextWrapping="Wrap" 
+                                   Margin="0,0,0,14" />
+
+                        <Button Content="解析凭证并登录" 
+                                Command="{Binding LoginWithTokenCommand}" 
+                                HorizontalAlignment="Stretch" 
+                                Background="{StaticResource MetroAccentBrush}" 
+                                Foreground="White" 
+                                FontWeight="Bold" 
+                                FontSize="15" 
+                                Padding="0,12" 
+                                BorderThickness="0" />
+
+                        <Border Background="#161620" BorderBrush="#262632" BorderThickness="1" Padding="12" Margin="0,18,0,0">
+                            <StackPanel>
+                                <TextBlock Text="💡 如何获取凭证：" FontWeight="SemiBold" FontSize="12" Foreground="White" Margin="0,0,0,6" />
+                                <TextBlock Text="1. 在电脑或手机浏览器打开 api.kurobbs.com 或网页端。" FontSize="11" Foreground="{StaticResource MetroSubTextBrush}" Margin="0,0,0,3" TextWrapping="Wrap" />
+                                <TextBlock Text="2. 登录账号后，在 F12 控制台或抓包软件中复制 token 请求头或 Cookie。" FontSize="11" Foreground="{StaticResource MetroSubTextBrush}" Margin="0,0,0,3" TextWrapping="Wrap" />
+                                <TextBlock Text="3. 直接将内容粘贴到上方输入框，程序将自动提取并校验登录。" FontSize="11" Foreground="{StaticResource MetroSubTextBrush}" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </PivotItem>
+        </Pivot>
+
+        <Grid Visibility="{Binding IsGeetestVisible, Converter={StaticResource BoolToVis}}" Background="#E8000000" Canvas.ZIndex="1000">
+            <Border Width="340" Height="420" Background="#121218" Padding="12" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <Grid>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="310" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                    <Grid Grid.Row="0" Margin="0,0,0,8">
+                        <TextBlock Text="请完成安全验证" FontSize="16" FontWeight="SemiBold" />
+                        <Button Content="✕" Click="OnCloseGeetestClick" HorizontalAlignment="Right" Background="Transparent" Foreground="#8E8E93" FontSize="16" Padding="6,2" BorderThickness="0" />
+                    </Grid>
+                    <Border Grid.Row="1" Background="#121218" BorderBrush="#2C2C34" BorderThickness="1">
+                        <WebView x:Name="GeetestWebView" ScriptNotify="OnGeetestScriptNotify" />
+                    </Border>
+                    <TextBlock Grid.Row="2" Text="请在上方完成验证以发送短信验证码" FontSize="11" Foreground="{StaticResource MetroSubTextBrush}" HorizontalAlignment="Center" Margin="0,10,0,0" />
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</Page>

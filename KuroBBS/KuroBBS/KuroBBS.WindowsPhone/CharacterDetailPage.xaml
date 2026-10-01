@@ -1,0 +1,286 @@
+<Page
+    x:Class="KuroBBS.CharacterDetailPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:helpers="using:KuroBBS.Helpers"
+    xmlns:models="using:KuroBBS.Models"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+
+    <Page.BottomAppBar>
+        <CommandBar Background="#121216" ClosedDisplayMode="Minimal" IsOpen="False">
+            <AppBarButton Icon="Back" Label="返回" Click="OnBackClick" />
+            <AppBarButton Icon="People" Label="编队推荐" Click="OnTeamRecommendClick" />
+            <AppBarButton Icon="Refresh" Label="刷新" Command="{Binding RefreshCommand}" />
+        </CommandBar>
+    </Page.BottomAppBar>
+
+    <Grid>
+        <!-- Native Progress Indicator -->
+        <ProgressBar VerticalAlignment="Top" IsIndeterminate="{Binding IsBusy}"
+                     Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}"
+                     Foreground="{StaticResource MetroAccentBrush}" Canvas.ZIndex="99" />
+
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="16,0,16,24">
+                <!-- Metro Header -->
+                <StackPanel Margin="0,14,0,10">
+                    <Grid>
+                        <TextBlock Text="战双帕弥什 · 构造体详情" FontSize="11" Foreground="{StaticResource MetroSubTextBrush}" />
+                        <TextBlock Text="{Binding Detail.Body.Career}" FontSize="11" Foreground="{StaticResource MetroAccentBrush}" HorizontalAlignment="Right" />
+                    </Grid>
+                    <TextBlock Text="{Binding Detail.Body.FullTitle}" FontSize="28" FontWeight="Light" Foreground="White" Margin="0,4,0,0" />
+                </StackPanel>
+
+                <!-- Top Hero / Character Overview Card -->
+                <Border Background="{StaticResource MetroCardBackgroundBrush}" BorderBrush="#2C2C36" BorderThickness="1" Padding="12" Margin="0,0,0,14">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="90" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Character Artwork/Avatar -->
+                        <Border Grid.Column="0" Width="80" Height="96" Background="#141418" BorderBrush="#333340" BorderThickness="1">
+                            <Grid>
+                                <Image Source="{Binding Detail.Body.IconUrl, Converter={StaticResource ImageCacheConverter}}" Stretch="UniformToFill" />
+                                <Border HorizontalAlignment="Right" VerticalAlignment="Top" Background="#D0000000" Padding="5,1">
+                                    <TextBlock Text="{Binding Detail.Grade}" FontSize="11" FontWeight="Bold" Foreground="{StaticResource MetroGoldBrush}" />
+                                </Border>
+                            </Grid>
+                        </Border>
+
+                        <!-- Attributes & Stats -->
+                        <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
+                            <!-- Fight Ability -->
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                <TextBlock Text="战力" FontSize="12" Foreground="{StaticResource MetroSubTextBrush}" VerticalAlignment="Bottom" Margin="0,0,6,0" />
+                                <TextBlock Text="{Binding Detail.FightAbilityText}" FontSize="22" FontWeight="Bold" Foreground="{StaticResource MetroAccentBrush}" />
+                            </StackPanel>
+
+                            <!-- Career & Element -->
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,3">
+                                <TextBlock Text="机体类型: " FontSize="11" Foreground="{StaticResource MetroSubTextBrush}" />
+                                <TextBlock Text="{Binding Detail.Body.Career}" FontSize="11" FontWeight="SemiBold" Foreground="White" />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,3">
+                                <TextBlock Text="属性定位: " FontSize="11" Foreground="{StaticResource MetroSubTextBrush}" />
+                                <TextBlock Text="{Binding Detail.Body.ElementDetail}" FontSize="11" FontWeight="SemiBold" Foreground="#66CCFF" />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="初始品质: " FontSize="11" Foreground="{StaticResource MetroSubTextBrush}" />
+                                <TextBlock Text="{Binding Detail.Body.RoleRank}" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource MetroGoldBrush}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Quick Entry: 编队推荐 -->
+                <Button Click="OnTeamRecommendClick" HorizontalAlignment="Stretch" Margin="0,0,0,14"
+                        Background="#1E1E24" BorderBrush="{StaticResource MetroAccentBrush}" BorderThickness="1" Padding="12,10">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="&#xE125;" FontFamily="Segoe UI Symbol" FontSize="18" Foreground="{StaticResource MetroAccentBrush}" VerticalAlignment="Center" Margin="0,0,10,0" />
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock Text="阵容编队推荐" FontSize="13" FontWeight="Bold" Foreground="White" />
+                            <TextBlock Text="查看主流配队、战区/囚笼方案与玩家推荐" FontSize="10" Foreground="{StaticResource MetroSubTextBrush}" Margin="0,2,0,0" />
+                        </StackPanel>
+                        <TextBlock Grid.Column="2" Text="&#xE0E3;" FontFamily="Segoe UI Symbol" FontSize="14" Foreground="{StaticResource MetroSubTextBrush}" VerticalAlignment="Center" />
+                    </Grid>
+                </Button>
+
+                <!-- Section: 武器装备 -->
+                <Border Background="#16161C" Padding="8,5" Margin="0,0,0,6">
+                    <TextBlock Text="武器装备" FontSize="13" FontWeight="SemiBold" Foreground="White" />
+                </Border>
+
+                <Border Background="{StaticResource MetroCardBackgroundBrush}" BorderBrush="#2C2C36" BorderThickness="1" Padding="12" Margin="0,0,0,14">
+                    <StackPanel>
+                        <Grid Margin="0,0,0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="54" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Width="48" Height="48" Background="#141418" BorderBrush="#333340" BorderThickness="1">
+                                <Image Source="{Binding Detail.WeaponInfo.Weapon.IconUrl, Converter={StaticResource ImageCacheConverter}}" Stretch="UniformToFill" />
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="10,0,0,0">
+                                <TextBlock Text="{Binding Detail.WeaponInfo.Weapon.Name}" FontSize="14" FontWeight="Bold" Foreground="White" />
+                                <StackPanel Orientation="Horizontal" Margin="0,3,0,0">
+                                    <TextBlock Text="超频等级: " FontSize="11" Foreground="{StaticResource MetroSubTextBrush}" />
+                                    <TextBlock Text="{Binding Detail.WeaponInfo.OverRunLevel, Converter={StaticResource StringFormatConverter}, ConverterParameter='Lv.{0}'}" FontSize="11" Foreground="{StaticResource MetroAccentBrush}" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- Weapon Skill -->
+                        <Border Background="#141418" Padding="8" Margin="0,2,0,0" BorderBrush="#262630" BorderThickness="1">
+                            <StackPanel>
+                                <TextBlock Text="{Binding Detail.WeaponInfo.Weapon.SkillName, Converter={StaticResource StringFormatConverter}, ConverterParameter='【{0}】'}"
+                                           FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource MetroGoldBrush}" Margin="0,0,0,3" />
+                                <TextBlock Text="{Binding Detail.WeaponInfo.Weapon.SkillDescription}" FontSize="11" Foreground="#C0C0C8" TextWrapping="Wrap" LineHeight="16" />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </Border>
+
+                <!-- Section: 意识装备 (套装效果) -->
+                <Border Background="#16161C" Padding="8,5" Margin="0,0,0,6">
+                    <TextBlock Text="意识装备 · 套装效果" FontSize="13" FontWeight="SemiBold" Foreground="White" />
+                </Border>
+
+                <ItemsControl ItemsSource="{Binding Detail.ChipSuitList}" Margin="0,0,0,14">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Background="{StaticResource MetroCardBackgroundBrush}" BorderBrush="#2C2C36" BorderThickness="1" Padding="10" Margin="0,0,0,8">
+                                <StackPanel>
+                                    <Grid Margin="0,0,0,6">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="38" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <Border Grid.Column="0" Width="34" Height="34" Background="#141418">
+                                            <Image Source="{Binding IconUrl, Converter={StaticResource ImageCacheConverter}}" Stretch="UniformToFill" />
+                                        </Border>
+                                        <TextBlock Grid.Column="1" Text="{Binding Name}" FontSize="13" FontWeight="Bold" Foreground="White" VerticalAlignment="Center" Margin="8,0,0,0" />
+                                        <Border Grid.Column="2" Background="{StaticResource MetroAccentBrush}" Padding="6,2" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding NumText}" FontSize="10" FontWeight="Bold" Foreground="White" />
+                                        </Border>
+                                    </Grid>
+
+                                    <!-- 2-Piece Description -->
+                                    <Border Visibility="{Binding DescriptionTwo, Converter={StaticResource NullToVis}}" Background="#141418" Padding="6" Margin="0,2,0,4">
+                                        <StackPanel>
+                                            <TextBlock Text="[2件套效果]" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource MetroAccentBrush}" Margin="0,0,0,2" />
+                                            <TextBlock Text="{Binding DescriptionTwo}" FontSize="10" Foreground="#B0B0B8" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- 4-Piece Description -->
+                                    <Border Visibility="{Binding DescriptionFour, Converter={StaticResource NullToVis}}" Background="#141418" Padding="6" Margin="0,2,0,0">
+                                        <StackPanel>
+                                            <TextBlock Text="[4件套效果]" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource MetroAccentBrush}" Margin="0,0,0,2" />
+                                            <TextBlock Text="{Binding DescriptionFour}" FontSize="10" Foreground="#B0B0B8" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <!-- Section: 意识共鸣 (1~6号位) -->
+                <Border Background="#16161C" Padding="8,5" Margin="0,0,0,6">
+                    <TextBlock Text="意识共鸣 (1~6 号位)" FontSize="13" FontWeight="SemiBold" Foreground="White" />
+                </Border>
+
+                <ItemsControl ItemsSource="{Binding Detail.ChipResonanceList}" Margin="0,0,0,14">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Background="{StaticResource MetroCardBackgroundBrush}" BorderBrush="#2C2C36" BorderThickness="1" Padding="10" Margin="0,0,0,6">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="42" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <!-- Slot & Chip Icon -->
+                                    <StackPanel Grid.Column="0" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                        <Border Width="34" Height="34" Background="#141418">
+                                            <Image Source="{Binding ChipIconUrl, Converter={StaticResource ImageCacheConverter}}" Stretch="UniformToFill" />
+                                        </Border>
+                                        <TextBlock Text="{Binding SiteText}" FontSize="9" FontWeight="SemiBold" Foreground="{StaticResource MetroGoldBrush}" HorizontalAlignment="Center" Margin="0,2,0,0" />
+                                    </StackPanel>
+
+                                    <!-- Resonance Skills (Upper & Lower Slots) -->
+                                    <StackPanel Grid.Column="1" Margin="10,0,0,0">
+                                        <TextBlock Text="{Binding ChipName}" FontSize="12" FontWeight="Bold" Foreground="White" Margin="0,0,0,3" />
+
+                                        <!-- Super Slot (Upper) -->
+                                        <Border Visibility="{Binding SuperDescription, Converter={StaticResource NullToVis}}" Background="#141418" Padding="5,3" Margin="0,0,0,2">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="上槽位: " FontSize="10" Foreground="{StaticResource MetroSubTextBrush}" />
+                                                <TextBlock Grid.Column="1" Text="{Binding SuperDescription}" FontSize="10" Foreground="#88D4FF" TextWrapping="Wrap" />
+                                            </Grid>
+                                        </Border>
+
+                                        <!-- Sub Slot (Lower) -->
+                                        <Border Visibility="{Binding SubDescription, Converter={StaticResource NullToVis}}" Background="#141418" Padding="5,3">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Text="下槽位: " FontSize="10" Foreground="{StaticResource MetroSubTextBrush}" />
+                                                <TextBlock Grid.Column="1" Text="{Binding SubDescription}" FontSize="10" Foreground="#88D4FF" TextWrapping="Wrap" />
+                                            </Grid>
+                                        </Border>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <!-- Section: 辅助机 (Partner) -->
+                <StackPanel Visibility="{Binding Detail.Partner.PartnerId, Converter={StaticResource NullToVis}}">
+                    <Border Background="#16161C" Padding="8,5" Margin="0,0,0,6">
+                        <TextBlock Text="辅助机" FontSize="13" FontWeight="SemiBold" Foreground="White" />
+                    </Border>
+
+                    <Border Background="{StaticResource MetroCardBackgroundBrush}" BorderBrush="#2C2C36" BorderThickness="1" Padding="12" Margin="0,0,0,14">
+                        <StackPanel>
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="48" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Border Grid.Column="0" Width="42" Height="42" Background="#141418">
+                                    <Image Source="{Binding Detail.Partner.IconUrl, Converter={StaticResource ImageCacheConverter}}" Stretch="UniformToFill" />
+                                </Border>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="8,0,0,0">
+                                    <TextBlock Text="{Binding Detail.Partner.Name}" FontSize="13" FontWeight="Bold" Foreground="White" />
+                                    <TextBlock Text="{Binding Detail.Partner.LevelText}" FontSize="10" Foreground="{StaticResource MetroSubTextBrush}" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <Border Grid.Column="2" Background="#D0000000" Padding="6,2" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding Detail.Partner.Grade}" FontSize="11" FontWeight="Bold" Foreground="{StaticResource MetroGoldBrush}" />
+                                </Border>
+                            </Grid>
+
+                            <!-- Partner Skills -->
+                            <ItemsControl ItemsSource="{Binding Detail.Partner.SkillList}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Background="#141418" Padding="6" Margin="0,2,0,4">
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding Name, Converter={StaticResource StringFormatConverter}, ConverterParameter='【{0}】'}"
+                                                           FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource MetroGoldBrush}" Margin="0,0,0,2" />
+                                                <TextBlock Text="{Binding Description}" FontSize="10" Foreground="#B0B0B8" TextWrapping="Wrap" />
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- Status Message -->
+                <TextBlock Text="{Binding StatusMessage}" Visibility="{Binding StatusMessage, Converter={StaticResource NullToVis}}"
+                           FontSize="12" Foreground="{StaticResource MetroSubTextBrush}" HorizontalAlignment="Center" Margin="0,8,0,0" />
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</Page>

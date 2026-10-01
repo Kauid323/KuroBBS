@@ -1,0 +1,139 @@
+<Page
+    x:Class="KuroBBS.DetailPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Background="#B8C9DB">
+
+    <Page.Resources>
+        <SolidColorBrush x:Key="PagePanelBrush" Color="#E8F1F7" />
+        <SolidColorBrush x:Key="PagePanelAltBrush" Color="#F4F8FB" />
+        <SolidColorBrush x:Key="PageSectionBrush" Color="#0E2A40" />
+        <SolidColorBrush x:Key="PageTextBrush" Color="#1E2A35" />
+        <SolidColorBrush x:Key="PageMutedBrush" Color="#667784" />
+        <SolidColorBrush x:Key="PageBlueBrush" Color="#087DC4" />
+        <SolidColorBrush x:Key="PageOrangeBrush" Color="#F26A3D" />
+    </Page.Resources>
+
+    <Page.BottomAppBar>
+        <CommandBar x:Name="BottomBar" Background="#0B1B2A" ClosedDisplayMode="Minimal" IsOpen="False">
+            <AppBarButton Icon="Back" Label="返回" Click="OnBackClick" />
+            <AppBarButton Icon="Refresh" Label="刷新" Command="{Binding RefreshCommand}" />
+        </CommandBar>
+    </Page.BottomAppBar>
+
+    <Grid>
+        <ProgressBar VerticalAlignment="Top" IsIndeterminate="{Binding IsBusy}"
+                     Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}"
+                     Foreground="{StaticResource MetroAccentBrush}" Canvas.ZIndex="99" />
+
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="16,10,16,24">
+                <Border Height="142" Background="#0B1B2A" Margin="-16,-10,-16,14" Padding="16,12,16,14">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <Grid>
+                            <TextBlock Text="详细信息" FontSize="25" FontWeight="SemiBold" Foreground="White" />
+                            <TextBlock Text="战双帕弥什" FontSize="12" Foreground="#9DB2C2" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                        </Grid>
+                        <Grid Grid.Row="1" Margin="0,12,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="66" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Border Width="56" Height="56" Background="#203B50" CornerRadius="28" BorderBrush="#208DD1" BorderThickness="2">
+                                <Image Source="{Binding Account.HeadIconUrl, Converter={StaticResource ImageCacheConverter}}" Stretch="UniformToFill" />
+                            </Border>
+                            <StackPanel Grid.Column="1" Margin="12,0,8,0" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding Account.RoleName}" FontSize="18" FontWeight="Bold" Foreground="White" />
+                                <TextBlock Text="{Binding Account.ServerName}" FontSize="12" Foreground="#AFC0CD" Margin="0,3,0,0" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding Account.LevelText}" FontSize="19" FontWeight="Bold" Foreground="#55B5F2" HorizontalAlignment="Right" />
+                            </StackPanel>
+                        </Grid>
+                    </Grid>
+                </Border>
+
+                <Border Height="38" Background="{StaticResource PageSectionBrush}" BorderBrush="#E5F0F7" BorderThickness="1" Padding="10,0" Margin="0,0,0,0">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Border Width="4" Height="18" Background="{StaticResource PageBlueBrush}" Margin="0,0,8,0" />
+                        <TextBlock Text="账号概览" FontSize="16" FontWeight="Bold" Foreground="White" />
+                    </StackPanel>
+                </Border>
+                <Border Background="{StaticResource PagePanelBrush}" BorderBrush="#D5E3EC" BorderThickness="1" Padding="12" Margin="0,0,0,14">
+                    <Grid>
+                        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                        <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,8,14"><TextBlock Text="角色总评分" FontSize="11" Foreground="{StaticResource PageMutedBrush}" /><TextBlock Text="{Binding Summary.RoleAllScore}" FontSize="21" FontWeight="Bold" Foreground="{StaticResource PageBlueBrush}" /></StackPanel>
+                        <StackPanel Grid.Row="0" Grid.Column="1" Margin="0,0,8,14"><TextBlock Text="构造体" FontSize="11" Foreground="{StaticResource PageMutedBrush}" /><TextBlock Text="{Binding Summary.CharacterCount}" FontSize="21" FontWeight="Bold" Foreground="{StaticResource PageTextBrush}" /></StackPanel>
+                        <StackPanel Grid.Row="0" Grid.Column="2" Margin="0,0,0,14"><TextBlock Text="成就" FontSize="11" Foreground="{StaticResource PageMutedBrush}" /><TextBlock Text="{Binding Summary.Achievement}" FontSize="21" FontWeight="Bold" Foreground="{StaticResource PageTextBrush}" /></StackPanel>
+                        <StackPanel Grid.Row="1" Grid.Column="0"><TextBlock Text="涂装收集" FontSize="11" Foreground="{StaticResource PageMutedBrush}" /><TextBlock Text="{Binding Summary.FashionProcess}" FontSize="15" Foreground="{StaticResource PageBlueBrush}" /></StackPanel>
+                        <StackPanel Grid.Row="1" Grid.Column="1"><TextBlock Text="剧情进度" FontSize="11" Foreground="{StaticResource PageMutedBrush}" /><TextBlock Text="{Binding Summary.StoryProcess}" FontSize="15" Foreground="{StaticResource PageBlueBrush}" /></StackPanel>
+                        <StackPanel Grid.Row="1" Grid.Column="2"><TextBlock Text="累计登录" FontSize="11" Foreground="{StaticResource PageMutedBrush}" /><TextBlock Text="{Binding Summary.GrandTotalLoginNum}" FontSize="15" Foreground="{StaticResource PageTextBrush}" /></StackPanel>
+                    </Grid>
+                </Border>
+
+                <Border Height="38" Background="{StaticResource PageSectionBrush}" BorderBrush="#E5F0F7" BorderThickness="1" Padding="10,0" Margin="0,0,0,0">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Border Width="4" Height="18" Background="{StaticResource PageBlueBrush}" Margin="0,0,8,0" />
+                        <TextBlock Text="每日数据" FontSize="16" FontWeight="Bold" Foreground="White" />
+                    </StackPanel>
+                </Border>
+                <ListView ItemsSource="{Binding DailyItems}" SelectionMode="None" IsItemClickEnabled="False" Margin="0,0,0,14">
+                    <ListView.ItemContainerStyle>
+                        <Style TargetType="ListViewItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Padding" Value="0" /><Setter Property="Margin" Value="0,0,0,5" /></Style>
+                    </ListView.ItemContainerStyle>
+                    <ListView.ItemTemplate>
+                        <DataTemplate>
+                            <Border Background="{StaticResource PagePanelAltBrush}" BorderBrush="#D5E3EC" BorderThickness="1" Padding="12,10">
+                                <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><TextBlock Text="{Binding Name}" FontSize="12" Foreground="{StaticResource PageTextBrush}" /><TextBlock Grid.Column="1" Text="{Binding ProgressText}" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource PageBlueBrush}" /></Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+
+                <Border Height="38" Background="{StaticResource PageSectionBrush}" BorderBrush="#E5F0F7" BorderThickness="1" Padding="10,0" Margin="0,0,0,0">
+                    <Grid>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Border Width="4" Height="18" Background="{StaticResource PageBlueBrush}" Margin="0,0,8,0" />
+                            <TextBlock Text="构造体" FontSize="16" FontWeight="Bold" Foreground="White" />
+                        </StackPanel>
+                        <Button Content="查看更多 〉" Click="OnViewAllRolesClick" HorizontalAlignment="Right" Padding="8,1" MinHeight="28" Foreground="White" Background="Transparent" BorderBrush="Transparent" />
+                    </Grid>
+                </Border>
+                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Height="158" Margin="0,0,0,14">
+                    <ItemsControl ItemsSource="{Binding Characters}">
+                        <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Width="128" Height="148" Margin="0,0,8,0" Background="{StaticResource PagePanelAltBrush}"
+                                      Tag="{Binding}" Tapped="OnCharacterCardTapped">
+                                    <Grid.RowDefinitions><RowDefinition Height="*" /><RowDefinition Height="31" /><RowDefinition Height="3" /></Grid.RowDefinitions>
+                                    <Border Grid.Row="0" Background="#E0EBF2" Padding="5"><Image Source="{Binding IconUrl, Converter={StaticResource ImageCacheConverter}}" Stretch="UniformToFill" /></Border>
+                                    <Border Grid.Row="1" Background="#17334A" Padding="8,0"><Grid><TextBlock Text="{Binding BodyName}" FontSize="12" FontWeight="SemiBold" Foreground="White" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" /><TextBlock Text="{Binding Grade}" FontSize="11" Foreground="#7BC9F8" HorizontalAlignment="Right" VerticalAlignment="Center" /></Grid></Border>
+                                    <Border Grid.Row="2" Background="{StaticResource PageOrangeBrush}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+
+                <Border Height="38" Background="{StaticResource PageSectionBrush}" BorderBrush="#E5F0F7" BorderThickness="1" Padding="10,0" Margin="0,0,0,0">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center"><Border Width="4" Height="18" Background="{StaticResource PageBlueBrush}" Margin="0,0,8,0" /><TextBlock Text="涂装收集" FontSize="16" FontWeight="Bold" Foreground="White" /></StackPanel>
+                </Border>
+                <Border Background="{StaticResource PagePanelBrush}" BorderBrush="#D5E3EC" BorderThickness="1" Padding="12" Margin="0,0,0,14">
+                    <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions><StackPanel Grid.Column="0"><TextBlock Text="角色涂装" FontSize="11" Foreground="{StaticResource PageMutedBrush}" /><TextBlock Text="{Binding Fashion.CharacterRateText}" FontSize="21" FontWeight="Bold" Foreground="{StaticResource PageBlueBrush}" /><TextBlock Text="{Binding Fashion.CharacterFashionCountText}" FontSize="10" Foreground="{StaticResource PageMutedBrush}" /></StackPanel><StackPanel Grid.Column="1"><TextBlock Text="武器涂装" FontSize="11" Foreground="{StaticResource PageMutedBrush}" /><TextBlock Text="{Binding Fashion.WeaponRateText}" FontSize="21" FontWeight="Bold" Foreground="{StaticResource PageBlueBrush}" /><TextBlock Text="{Binding Fashion.WeaponFashionCountText}" FontSize="10" Foreground="{StaticResource PageMutedBrush}" /></StackPanel></Grid>
+                </Border>
+
+                <TextBlock Text="{Binding StatusMessage}" Visibility="{Binding StatusMessage, Converter={StaticResource NullToVis}}" FontSize="12" Foreground="{StaticResource PageMutedBrush}" TextWrapping="Wrap" HorizontalAlignment="Center" Margin="0,8,0,0" />
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</Page>

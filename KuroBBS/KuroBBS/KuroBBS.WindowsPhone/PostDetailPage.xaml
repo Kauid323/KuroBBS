@@ -1,0 +1,505 @@
+<Page
+    x:Class="KuroBBS.PostDetailPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:KuroBBS"
+    xmlns:helpers="using:KuroBBS.Helpers"
+    xmlns:models="using:KuroBBS.Models"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+
+    <Page.BottomAppBar>
+        <CommandBar x:Name="BottomBar" Background="#121216" ClosedDisplayMode="Minimal" IsOpen="False" Visibility="{Binding IsBottomBarVisible, Converter={StaticResource BoolToVis}}">
+            <AppBarButton Icon="Back" Label="返回" Click="OnBackClick" />
+            <AppBarButton Icon="{Binding FollowButtonIcon, Converter={StaticResource StringToSymbolIcon}}" Label="{Binding FollowButtonLabel}" Command="{Binding ToggleFollowCommand}" />
+            <AppBarButton Icon="Like" Label="{Binding LikeButtonLabel}" Command="{Binding LikeCommand}" />
+            <AppBarButton Icon="{Binding CollectButtonIcon, Converter={StaticResource StringToSymbolIcon}}" Label="{Binding CollectButtonLabel}" Command="{Binding CollectCommand}" />
+            <CommandBar.SecondaryCommands>
+                <AppBarButton Icon="Refresh" Label="刷新评论" Command="{Binding RefreshCommentsCommand}" />
+            </CommandBar.SecondaryCommands>
+        </CommandBar>
+    </Page.BottomAppBar>
+
+    <Grid x:Name="RootLayoutGrid">
+        <!-- Native Progress Indicator -->
+        <ProgressBar VerticalAlignment="Top" IsIndeterminate="{Binding IsBusy}" Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" Foreground="{StaticResource MetroAccentBrush}" Canvas.ZIndex="999" />
+
+        <!-- Main Page Layout Grid -->
+        <Grid>
+            <Grid.RowDefinitions>
+                <!-- Row 0: Video Player Area (Auto in normal, * in fullscreen) -->
+                <RowDefinition x:Name="VideoRowDefinition" Height="Auto" />
+                <!-- Row 1: Pivot for Post Detail & Comments -->
+                <RowDefinition x:Name="ContentRowDefinition" Height="*" />
+            </Grid.RowDefinitions>
+
+            <!-- Video Player Area (Row 0) - Fixed in Visual Tree, Never Detached -->
+            <Grid Grid.Row="0" 
+                  x:Name="InlineVideoContainer" 
+                  Visibility="{Binding HasVideo, Converter={StaticResource BoolToVis}}" 
+                  Background="#000000" 
+                  Height="220"
+                  HorizontalAlignment="Stretch"
+                  VerticalAlignment="Stretch"
+                  Canvas.ZIndex="100">
+                <!-- Native WinRT HLS / TS MediaElement -->
+                <MediaElement x:Name="PostMediaElement"
+                              HorizontalAlignment="Stretch"
+                              VerticalAlignment="Stretch"
+                              Stretch="Uniform"
+                              AutoPlay="False"
+                              MediaOpened="OnMediaOpened"
+                              MediaEnded="OnMediaEnded"
+                              MediaFailed="OnMediaFailed"
+                              CurrentStateChanged="OnMediaCurrentStateChanged" />
+
+                <!-- Cover Image & Big Center Play Button Overlay (Visible only before first playback starts) -->
+                <Grid x:Name="CoverOverlayGrid" Visibility="{Binding HasStartedPlayback, Converter={StaticResource InvBoolToVis}}" Background="#CC000000" Tapped="OnPlayPauseClick">
+                    <Image Source="{Binding VideoCoverUrl, Converter={StaticResource ImageCacheConverter}}" Stretch="UniformToFill" Opacity="0.85" />
+                    <Border Background="#40000000" />
+                    
+                    <!-- Big Play Button -->
+                    <Border Width="56" Height="56" Background="#D900A3FF" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock Text="▶" FontSize="22" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="3,0,0,0" />
+                    </Border>
+                </Grid>
+
+                <!-- Resolving / Buffering Skeleton Layer -->
+                <Border Visibility="{Binding IsVideoResolving, Converter={StaticResource BoolToVis}}" Background="#E6161620">
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <ProgressBar IsIndeterminate="True" Width="140" Foreground="{StaticResource MetroAccentBrush}" Margin="0,0,0,8" />
+                        <TextBlock Text="正在解析与装载视频切片..." FontSize="11" Foreground="{StaticResource MetroSubTextBrush}" HorizontalAlignment="Center" />
+                    </StackPanel>
+                </Border>
+
+                <!-- Interactive Tap Area to toggle Controller Bar visibility -->
+                <Border Background="Transparent" Tapped="OnVideoAreaTapped" />
+
+                <!-- Sleek Metro Video Controller Bar (Aligned, Height="40", Semi-Transparent) -->
+                <Border x:Name="InlineControlsBar" 
+                        VerticalAlignment="Bottom" 
+                        Background="#E6121218" 
+                        Height="40" 
+                        Padding="8,0"
+                        Visibility="{Binding IsControlsVisible, Converter={StaticResource BoolToVis}}">
+                    <Grid VerticalAlignment="Center">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <!-- 1. Play / Pause Button -->
+                        <Button Grid.Column="0" 
+                                Content="{Binding PlayPauseIcon}" 
+                                Click="OnPlayPauseClick" 
+                                Background="Transparent" 
+                                Foreground="White" 
+                                BorderThickness="0" 
+                                FontSize="15" 
+                                MinWidth="32" 
+                                Height="34" 
+                                Padding="0" 
+                                VerticalAlignment="Center" 
+                                Margin="0,0,4,0" />
+
+                        <!-- 2. Current Time -->
+                        <TextBlock Grid.Column="1" 
+                                   Text="{Binding CurrentTimeText}" 
+                                   FontSize="11" 
+                                   Foreground="White" 
+                                   VerticalAlignment="Center" 
+                                   Margin="2,0,4,0" />
+
+                        <!-- 3. Seek Slider -->
+                        <Slider Grid.Column="2" 
+                                x:Name="VideoSeekSlider" 
+                                Minimum="0" 
+                                Maximum="{Binding TotalDurationSeconds}" 
+                                Value="{Binding CurrentPositionSeconds, Mode=TwoWay}" 
+                                ValueChanged="OnSeekSliderValueChanged"
+                                Height="32" 
+                                Margin="4,0" 
+                                VerticalAlignment="Center" 
+                                Foreground="{StaticResource MetroAccentBrush}" />
+
+                        <!-- 4. Total Duration -->
+                        <TextBlock Grid.Column="3" 
+                                   Text="{Binding TotalTimeText}" 
+                                   FontSize="11" 
+                                   Foreground="#A0A0A8" 
+                                   VerticalAlignment="Center" 
+                                   Margin="4,0,6,0" />
+
+                        <!-- 5. Quality Switcher Button with Flyout -->
+                        <Button Grid.Column="4" 
+                                Content="{Binding SelectedQualityLabel}" 
+                                Background="#2A2A36" 
+                                Foreground="White" 
+                                BorderThickness="0" 
+                                FontSize="11" 
+                                Height="26" 
+                                Padding="6,0" 
+                                VerticalAlignment="Center" 
+                                Margin="2,0,4,0">
+                            <Button.Flyout>
+                                <MenuFlyout x:Name="QualityFlyout">
+                                </MenuFlyout>
+                            </Button.Flyout>
+                        </Button>
+
+                        <!-- 6. Fullscreen Expand Button -->
+                        <Button Grid.Column="5" 
+                                Content="{Binding FullScreenIcon}" 
+                                Click="OnFullScreenToggleClick" 
+                                Background="Transparent" 
+                                Foreground="White" 
+                                BorderThickness="0" 
+                                FontSize="14" 
+                                MinWidth="30" 
+                                Height="34" 
+                                Padding="0" 
+                                VerticalAlignment="Center" 
+                                Margin="2,0,0,0" />
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <!-- Row 1: Pivot for Post Detail & Comments (Hidden when in Fullscreen) -->
+            <Pivot Grid.Row="1" x:Name="MainPivot" Title="帖子详情" Visibility="{Binding IsFullScreen, Converter={StaticResource InvBoolToVis}}">
+                <Pivot.TitleTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding}" FontSize="11" Foreground="{StaticResource MetroSubTextBrush}" Margin="0,0,0,0" />
+                    </DataTemplate>
+                </Pivot.TitleTemplate>
+                <Pivot.HeaderTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding}" FontSize="20" FontWeight="SemiBold" Margin="0,0,14,0" IsHitTestVisible="False" />
+                    </DataTemplate>
+                </Pivot.HeaderTemplate>
+                
+                <!-- Tab 1: 帖子正文 -->
+                <PivotItem Header="正文" Margin="0">
+                    <ScrollViewer x:Name="ContentScrollViewer">
+                        <StackPanel x:Name="PostContentStackPanel" Margin="0,10,0,20">
+                            <!-- Author Header (Tap to view user profile) -->
+                            <Grid Margin="0,0,0,12" Background="Transparent" Tapped="OnAuthorHeaderTapped">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+
+                                <!-- Author Avatar with Disk & Memory Cache -->
+                                <Border Grid.Column="0" Width="40" Height="40" Margin="0,0,12,0" Background="#282832">
+                                    <Grid>
+                                        <TextBlock Text="K" HorizontalAlignment="Center" VerticalAlignment="Center" FontWeight="Bold" Foreground="#8E8E93" />
+                                        <Ellipse Width="40" Height="40">
+                                            <Ellipse.Fill>
+                                                <ImageBrush ImageSource="{Binding Post.Author.AvatarUrl, Converter={StaticResource ImageCacheConverter}}" Stretch="UniformToFill" />
+                                            </Ellipse.Fill>
+                                        </Ellipse>
+                                    </Grid>
+                                </Border>
+
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding Post.Author.UserName}" FontWeight="Bold" FontSize="15" Foreground="White" />
+                                    <TextBlock Text="{Binding Post.PostTimeStr}" FontSize="11" Foreground="{StaticResource MetroSubTextBrush}" />
+                                </StackPanel>
+                            </Grid>
+
+                            <!-- Post Title -->
+                            <TextBlock Text="{Binding Post.Title}" FontSize="18" FontWeight="Bold" Foreground="White" Margin="0,0,0,12" TextWrapping="Wrap" />
+
+                            <!-- Dynamic Structured Content Blocks (Paragraphs, Inline Emojis, In-place Images) -->
+                            <StackPanel x:Name="DynamicPostContentContainer" Margin="0,0,0,14" />
+
+                            <!-- Post Footer (IP 属地) -->
+                            <Border Margin="0,12,0,24" Padding="0,10,0,0" BorderBrush="#222228" BorderThickness="0,1,0,0">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding Post.Author.IpRegion, Converter={StaticResource StringFormatConverter}, ConverterParameter='IP 属地: {0}'}" FontSize="12" Foreground="{StaticResource MetroSubTextBrush}" />
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </PivotItem>
+
+                <!-- Tab 2: 评论楼层 -->
+                <PivotItem Header="评论" Margin="0">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <!-- Comments List -->
+                        <ListView x:Name="CommentsListView" Grid.Row="0" ItemsSource="{Binding Comments}" SelectionMode="None">
+                            <ListView.ItemContainerStyle>
+                                <Style TargetType="ListViewItem">
+                                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                    <Setter Property="Margin" Value="0,0,0,8" />
+                                    <Setter Property="Padding" Value="0" />
+                                </Style>
+                            </ListView.ItemContainerStyle>
+                            <ListView.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="{StaticResource MetroCardBackgroundBrush}" Padding="12" BorderBrush="#26262E" BorderThickness="1">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+
+                                            <!-- Commenter Avatar with Disk & Memory Cache (Tap for User Profile) -->
+                                            <Border Grid.Column="0" Width="32" Height="32" Margin="0,0,10,0" Background="#282832" VerticalAlignment="Top" Tapped="OnCommentAvatarTapped" Tag="{Binding UserId}">
+                                                <Grid>
+                                                    <TextBlock Text="👤" FontSize="14" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="#8E8E93" />
+                                                    <Ellipse Width="32" Height="32">
+                                                        <Ellipse.Fill>
+                                                            <ImageBrush ImageSource="{Binding AvatarUrl, Converter={StaticResource ImageCacheConverter}}" Stretch="UniformToFill" />
+                                                        </Ellipse.Fill>
+                                                    </Ellipse>
+                                                </Grid>
+                                            </Border>
+
+                                            <StackPanel Grid.Column="1">
+                                                <!-- Comment Header -->
+                                                <Grid Margin="0,0,0,4">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding UserName}" FontSize="13" FontWeight="SemiBold" Foreground="White" Margin="0,0,6,0" Tapped="OnCommentAvatarTapped" Tag="{Binding UserId}" />
+                                                        <Border Background="#20FFFFFF" Padding="4,1" Margin="0,0,6,0" VerticalAlignment="Center">
+                                                            <TextBlock Text="{Binding FloorText}" FontSize="9" Foreground="{StaticResource MetroSubTextBrush}" />
+                                                        </Border>
+                                                        <TextBlock Text="{Binding IpRegion}" FontSize="10" Foreground="{StaticResource MetroSubTextBrush}" VerticalAlignment="Center" />
+                                                    </StackPanel>
+
+                                                    <TextBlock Grid.Column="1" Text="{Binding CreateTimeStr}" FontSize="11" Foreground="{StaticResource MetroSubTextBrush}" VerticalAlignment="Center" />
+                                                </Grid>
+
+                                                <!-- Comment Text with Rich Inline Emojis -->
+                                                <RichTextBlock helpers:InlineRunsHelper.RunsSource="{Binding ContentRuns}" 
+                                                               FontSize="13" 
+                                                               Foreground="#E0E0E6" 
+                                                               TextWrapping="Wrap" 
+                                                               Margin="0,2,0,6" 
+                                                               LineHeight="18" 
+                                                               IsTextSelectionEnabled="False" />
+
+                                                <!-- Nested Replies / 楼中楼 (Visible when HasReplies is True) -->
+                                                <Border Visibility="{Binding HasReplies, Converter={StaticResource BoolToVis}}" 
+                                                        Background="#161622" 
+                                                        BorderBrush="#252534" 
+                                                        BorderThickness="1" 
+                                                        Padding="8,6" 
+                                                        Margin="0,2,0,6">
+                                                    <ItemsControl ItemsSource="{Binding Replies}">
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate>
+                                                                <Grid Margin="0,2,0,4">
+                                                                    <Grid.ColumnDefinitions>
+                                                                        <ColumnDefinition Width="*" />
+                                                                        <ColumnDefinition Width="Auto" />
+                                                                    </Grid.ColumnDefinitions>
+
+                                                                    <StackPanel Grid.Column="0">
+                                                                        <!-- Reply Header: Author [-> ToUser] -->
+                                                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                                            <TextBlock Text="{Binding UserName}" FontSize="11.5" FontWeight="SemiBold" Foreground="{StaticResource MetroAccentBrush}" Tapped="OnCommentAvatarTapped" Tag="{Binding UserId}" />
+                                                                            <TextBlock Text=" 回复 " FontSize="10" Foreground="#888894" Visibility="{Binding HasToUser, Converter={StaticResource BoolToVis}}" Margin="2,0" />
+                                                                            <TextBlock Text="{Binding ToUserName}" FontSize="11.5" FontWeight="SemiBold" Foreground="#B0B0C0" Visibility="{Binding HasToUser, Converter={StaticResource BoolToVis}}" Tapped="OnCommentAvatarTapped" Tag="{Binding ToUserId}" />
+                                                                            <TextBlock Text=":" FontSize="11" Foreground="#888894" Margin="2,0,0,0" />
+                                                                        </StackPanel>
+
+                                                                        <!-- Reply Text with Rich Emojis -->
+                                                                        <RichTextBlock helpers:InlineRunsHelper.RunsSource="{Binding ContentRuns}"
+                                                                                       FontSize="11.5"
+                                                                                       Foreground="#D8D8E0"
+                                                                                       TextWrapping="Wrap"
+                                                                                       Margin="0,1,0,0"
+                                                                                       LineHeight="16"
+                                                                                       IsTextSelectionEnabled="False" />
+                                                                    </StackPanel>
+
+                                                                    <!-- Reply Like Button (Compact) -->
+                                                                    <Button Grid.Column="1" 
+                                                                            VerticalAlignment="Center" 
+                                                                            Background="Transparent" 
+                                                                            BorderThickness="0" 
+                                                                            Padding="4,1" 
+                                                                            MinWidth="0" 
+                                                                            MinHeight="0" 
+                                                                            Margin="4,0,0,0"
+                                                                            Click="OnReplyLikeButtonClick">
+                                                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                                            <TextBlock Text="{Binding LikeIcon}" Foreground="{Binding LikeColor}" FontSize="11" Margin="0,0,3,0" VerticalAlignment="Center" />
+                                                                            <TextBlock Text="{Binding LikeCountText}" FontSize="10.5" Foreground="{Binding LikeColor}" VerticalAlignment="Center" />
+                                                                        </StackPanel>
+                                                                    </Button>
+                                                                </Grid>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+                                                </Border>
+
+                                                <!-- Comment Footer -->
+                                                <Grid Margin="0,2,0,0">
+                                                    <TextBlock HorizontalAlignment="Left" Text="{Binding ReplyCountText}" FontSize="10.5" Foreground="{StaticResource MetroSubTextBrush}" Visibility="{Binding HasReplies, Converter={StaticResource BoolToVis}}" VerticalAlignment="Center" />
+                                                    <Button HorizontalAlignment="Right" 
+                                                            Background="Transparent" 
+                                                            BorderThickness="0" 
+                                                            Padding="4,1" 
+                                                            MinWidth="0" 
+                                                            MinHeight="0" 
+                                                            Margin="0" 
+                                                            VerticalAlignment="Center" 
+                                                            Click="OnCommentLikeButtonClick">
+                                                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                            <TextBlock Text="{Binding LikeIcon}" Foreground="{Binding LikeColor}" FontSize="12" Margin="0,0,3,0" VerticalAlignment="Center" />
+                                                            <TextBlock Text="{Binding LikeCountText}" FontSize="11" Foreground="{Binding LikeColor}" VerticalAlignment="Center" />
+                                                        </StackPanel>
+                                                    </Button>
+                                                </Grid>
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+
+                        <!-- Comments Loading Indicator -->
+                        <ProgressBar Grid.Row="0" VerticalAlignment="Top" IsIndeterminate="True" Visibility="{Binding IsLoadingComments, Converter={StaticResource BoolToVis}}" Foreground="{StaticResource MetroAccentBrush}" />
+
+                        <!-- Flat Metro Bottom Comment Input Bar -->
+                        <Grid Grid.Row="1" Margin="0,8,0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <!-- Flat Metro Input Box with sleek bottom line -->
+                            <TextBox Grid.Column="0" 
+                                     Text="{Binding InputCommentText, Mode=TwoWay}" 
+                                     PlaceholderText="发表评论..." 
+                                     Background="Transparent"
+                                     BorderBrush="#44444C"
+                                     BorderThickness="0,0,0,1.5"
+                                     Foreground="White"
+                                     FontSize="14"
+                                     MinHeight="38"
+                                     Height="38"
+                                     Padding="4,6"
+                                     VerticalAlignment="Center"
+                                     Margin="0,0,10,0" />
+
+                            <!-- Flat Metro Send Button -->
+                            <Button Grid.Column="1" 
+                                    Content="发送" 
+                                    Command="{Binding SendCommentCommand}" 
+                                    Background="{StaticResource MetroAccentBrush}" 
+                                    Foreground="White" 
+                                    FontWeight="SemiBold"
+                                    FontSize="13"
+                                    MinWidth="60"
+                                    MinHeight="38"
+                                    Height="38"
+                                    BorderThickness="0"
+                                    Padding="12,0"
+                                    VerticalAlignment="Center" />
+                        </Grid>
+                    </Grid>
+                </PivotItem>
+            </Pivot>
+        </Grid>
+
+        <!-- Metro Fullscreen Photo Viewer Overlay -->
+        <Grid x:Name="ImageViewerOverlay"
+              Visibility="{Binding IsImageViewerOpen, Converter={StaticResource BoolToVis}}"
+              Background="#F8000000"
+              Canvas.ZIndex="3000">
+            <Grid.Transitions>
+                <TransitionCollection>
+                    <EntranceThemeTransition />
+                </TransitionCollection>
+            </Grid.Transitions>
+
+            <!-- ScrollViewer with pinch-to-zoom & smooth panning -->
+            <ScrollViewer x:Name="ImageViewerScrollViewer"
+                          HorizontalScrollBarVisibility="Hidden"
+                          VerticalScrollBarVisibility="Hidden"
+                          ZoomMode="Enabled"
+                          MinZoomFactor="0.5"
+                          MaxZoomFactor="5.0"
+                          DoubleTapped="OnImageViewerDoubleTapped"
+                          Tapped="OnImageViewerBackgroundTapped">
+                <Grid x:Name="ImageViewerContainer" HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <Image x:Name="ViewerImage"
+                           Source="{Binding SelectedImageUrl, Converter={StaticResource ImageCacheConverter}}"
+                           Stretch="Uniform"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           ImageOpened="OnViewerImageOpened" />
+                </Grid>
+            </ScrollViewer>
+
+            <!-- Top Minimal Floating Toolbar (Save & Close) -->
+            <Grid VerticalAlignment="Top" HorizontalAlignment="Stretch" Margin="12,12,12,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <!-- Save Button (Transparent background, compact icon + label) -->
+                <Button Grid.Column="1"
+                        Click="OnSaveImageClick"
+                        Background="Transparent"
+                        BorderBrush="Transparent"
+                        BorderThickness="0"
+                        Padding="10,6"
+                        Margin="0,0,6,0"
+                        VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="💾" FontSize="14" Foreground="#00A3FF" VerticalAlignment="Center" Margin="0,0,4,0" />
+                        <TextBlock Text="保存" FontSize="14" Foreground="White" FontWeight="SemiBold" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+
+                <!-- Close Button (Transparent background) -->
+                <Button Grid.Column="2"
+                        Click="OnImageViewerCloseClick"
+                        Background="Transparent"
+                        BorderBrush="Transparent"
+                        BorderThickness="0"
+                        Padding="10,6"
+                        VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="✕" FontSize="14" Foreground="#FF453A" VerticalAlignment="Center" Margin="0,0,4,0" />
+                        <TextBlock Text="关闭" FontSize="14" Foreground="White" FontWeight="SemiBold" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+            </Grid>
+
+            <!-- Save Notification Toast Banner -->
+            <Border x:Name="SaveToastBorder"
+                    Visibility="Collapsed"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Bottom"
+                    Margin="0,0,0,48"
+                    Background="#E61C1C24"
+                    BorderBrush="#33FFFFFF"
+                    BorderThickness="1"
+                    Padding="18,10">
+                <TextBlock x:Name="SaveToastText" Text="已保存到相册" FontSize="13" Foreground="White" FontWeight="Medium" />
+            </Border>
+        </Grid>
+    </Grid>
+</Page>
