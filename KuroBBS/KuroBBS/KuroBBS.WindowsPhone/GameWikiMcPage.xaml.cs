@@ -36,11 +36,17 @@ namespace KuroBBS
             {
                 await ViewModel.LoadHomepageAsync(9);
             }
+            else
+            {
+                // 页面被缓存，返回时恢复倒计时刷新。
+                ViewModel.StartCountdownTimer();
+            }
         }
 
         protected override void OnNavigatedFrom(NavigationEventArgs e)
         {
             HardwareButtons.BackPressed -= OnHardwareBackPressed;
+            ViewModel.StopCountdownTimer();
             base.OnNavigatedFrom(e);
         }
 
@@ -238,6 +244,34 @@ namespace KuroBBS
             {
                 ParseAndNavigateUrl(item.LinkUrl, item.Title);
             }
+        }
+
+        /// <summary>点击「特色玩法与唤取 / 热门活动」卡片。</summary>
+        private void OnEventCardTapped(object sender, TappedRoutedEventArgs e)
+        {
+            var element = sender as FrameworkElement;
+            if (element == null) return;
+            var card = element.Tag as WikiEventCard;
+            if (card == null) return;
+
+            if (card.CatalogueId > 0)
+            {
+                Frame.Navigate(typeof(WikiItemListPage), "9|" + card.CatalogueId + "|" + card.Title);
+            }
+            else if (!string.IsNullOrEmpty(card.EntryId) && card.EntryId != "0")
+            {
+                Frame.Navigate(typeof(WikiEntryDetailPage), "9|" + card.EntryId);
+            }
+            else if (!string.IsNullOrEmpty(card.LinkUrl))
+            {
+                ParseAndNavigateUrl(card.LinkUrl, card.Title);
+            }
+        }
+
+        /// <summary>点击「贡献榜」入口 → 应用内榜单页（Pivot 周榜/月榜/总榜）。</summary>
+        private void OnContributorHeaderTapped(object sender, TappedRoutedEventArgs e)
+        {
+            Frame.Navigate(typeof(WikiContributorRankPage), "9");
         }
 
         private void ParseAndNavigateUrl(string url, string title)

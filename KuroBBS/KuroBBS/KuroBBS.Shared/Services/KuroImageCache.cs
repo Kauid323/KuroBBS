@@ -35,14 +35,46 @@ namespace KuroBBS.Services
 
         private readonly Dictionary<string, BitmapImage> _memoryCache;
         private readonly LinkedList<string> _lruKeys;
+
         /// <summary>
-        /// 内存缓存条目上限。
-        /// 注意：每个条目都是**已解码的位图**（480px 宽的长图可达 1~3MB）。
-        /// 配合 KuroLazyImage 的「视口加载 + 离屏回收」，同时存活的图片本就不多，
-        /// 缓存 45 张纯属浪费（最坏 ~100MB 常驻）。降到 16 足够覆盖回滚/相邻预取，
-        /// 又能显著压低常驻内存，避免 WP8.1 OOM。
+        /// 内存缓存**条目数**上限（次要闸门，兜底防「几万张缩略图对象」）。
+        /// 主闸门是 <see cref="MaxMemoryCacheBytes"/>。
         /// </summary>
-        private const int MaxMemoryCacheItems = 16;
+        private const int MaxMemoryCacheItems = 256;
+
+        /// <summary>
+        /// 内存缓存**解码像素字节数**上限（主闸门）。
+        ///
+        /// 【为什么按字节而不是按条数】每条都是「已解码的位图」，尺寸差异极大：
+        /// 列表缩略图 150px ≈ 150×112×4 ≈ 66KB；图鉴长图 480×3000 ≈ 5.5MB —— 相差 80 倍。
+        /// 旧实现按「条数 = 8」限：8 张缩略图才 0.5MB，却已经把缓存挤爆 →
+        /// 滚动时反复 miss、反复重新解码（用户实测：滑动图片总是重新加载）；
+        /// 而 8 张长图又要 44MB，照样可能 OOM。**按字节限才能「小图多留、大图早走」**。
+        ///
+        /// 【为什么不再「滚出视口就删缓存」】旧实现滚出视口就 EvictMemoryCache，
+        /// 导致滚回来必然 miss → 重新读盘 + 重新解码。现在离屏只**摘下 Image.Source 引用**，
+        /// 解码结果留在本缓存里，滚回来直接命中、瞬时显示；内存安全完全由这里的字节预算保证。
+        ///
+        /// 20MB 的选取：旧实现最坏 8×5.5MB ≈ 44MB，新实现**更小**，所以不会更危险。
+        /// </summary>
+        private const long MaxMemoryCacheBytes = 20L * 1024 * 1024;
+
+        /// <summary>cacheKey -> 该条目解码后占用的估算字节数。</summary>
+        private readonly Dictionary<string, long> _entryBytes;
+        /// <summary>当前内存缓存占用的估算总字节数（= _entryBytes 各项之和）。</summary>
+        private long _memoryCacheBytes;
+
+        /// <summary>
+        /// cacheKey -> **实测**解码字节数。一经测得就长期记住，**不随缓存淘汰而遗忘**。
+        ///
+        /// 作用：防止「抖动」—— 某图被淘汰后，估算又变回乐观值 → 被判定为便宜 → 重新解码
+        /// → 实测很大 → 再淘汰 …… 循环。记住实测值后，该图的成本是稳定的，
+        /// 判定结果不会再反复横跳。
+        /// </summary>
+        private readonly Dictionary<string, long> _knownBytes;
+        /// <summary>_knownBytes 条数上限，超出时清理「已不在缓存中」的项。</summary>
+        private const int MaxKnownSizeEntries = 2048;
+
         private readonly HashSet<string> _diskFileCache;
         private readonly HashSet<string> _inFlightUrls;
         private readonly object _lock = new object();
@@ -65,6 +97,8 @@ namespace KuroBBS.Services
         {
             _memoryCache = new Dictionary<string, BitmapImage>();
             _lruKeys = new LinkedList<string>();
+            _entryBytes = new Dictionary<string, long>(StringComparer.Ordinal);
+            _knownBytes = new Dictionary<string, long>(StringComparer.Ordinal);
             _diskFileCache = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             _inFlightUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -156,7 +190,7 @@ namespace KuroBBS.Services
                     try { bitmap.UriSource = new Uri(url); } catch { }
                 }
 
-                PutInMemoryCache(cacheKey, bitmap);
+                PutInMemoryCache(cacheKey, bitmap, decodeWidth, decodeHeight);
                 return bitmap;
             }
 
@@ -167,7 +201,7 @@ namespace KuroBBS.Services
             }
             catch { }
 
-            PutInMemoryCache(cacheKey, bitmap);
+            PutInMemoryCache(cacheKey, bitmap, decodeWidth, decodeHeight);
 
             QueueBackgroundDownload(url, fileName);
             return bitmap;
@@ -324,7 +358,7 @@ namespace KuroBBS.Services
                     return;
                 }
 
-                PutInMemoryCache(cacheKey, bitmap);
+                PutInMemoryCache(cacheKey, bitmap, decodeWidth, decodeHeight);
 
                 if (image == null) return;
                 try { image.Source = bitmap; } catch { }
@@ -382,25 +416,164 @@ namespace KuroBBS.Services
             });
         }
 
-        private void PutInMemoryCache(string key, BitmapImage bitmap)
-        {            lock (_lock)
+        private void PutInMemoryCache(string key, BitmapImage bitmap, int decodeWidth, int decodeHeight)
+        {
+            if (bitmap == null) return;
+
+            bool isNew;
+            lock (_lock)
             {
-                if (_memoryCache.ContainsKey(key))
+                isNew = !_memoryCache.ContainsKey(key);
+                if (!isNew) _lruKeys.Remove(key);
+
+                _memoryCache[key] = bitmap;
+                _lruKeys.AddFirst(key);
+                SetEntryBytesLocked(key, EstimateBytes(decodeWidth, decodeHeight));
+                TrimMemoryCacheLocked();
+            }
+
+            // 解码完成后能拿到**真实**像素尺寸，用它替换粗略估算（长图/宽图差别极大）。
+            if (isNew) HookBitmapSize(key, bitmap);
+        }
+
+        /// <summary>
+        /// 粗略估算一张图解码后占用的字节数。
+        /// 只知道宽度时（decodeHeight == 0，懒加载恒为 0）按 1:1.5 竖幅估一个高度 ——
+        /// 宁可高估：高估只会让**远端**的图更早被回收，视口内的图永远优先保留。
+        /// 真实值会在 ImageOpened 后修正。
+        /// </summary>
+        private static long EstimateBytes(int decodeWidth, int decodeHeight)
+        {
+            int w = decodeWidth > 0 ? Math.Min(1080, decodeWidth) : 480;
+            int h = decodeHeight > 0 ? Math.Min(1080, decodeHeight) : (int)(w * 1.5);
+            if (h < 1) h = 1;
+            return (long)w * h * 4L;
+        }
+
+        /// <summary>
+        /// 供 KuroLazyImage 做「同时持有位图」的字节预算判断。
+        /// 命中缓存返回**真实**估算值；否则返回按解码尺寸的粗略值。
+        /// </summary>
+        public long GetEstimatedBytes(string url, int decodeWidth, int decodeHeight = 0)
+        {
+            if (string.IsNullOrWhiteSpace(url)) return 0;
+
+            string cacheKey = string.Format("{0}_w{1}_h{2}", url, decodeWidth, decodeHeight);
+            lock (_lock)
+            {
+                long bytes;
+                if (_entryBytes.TryGetValue(cacheKey, out bytes) && bytes > 0) return bytes;
+                // 缓存里没有，但曾经实测过 → 用实测值（避免估算来回横跳导致抖动）
+                if (_knownBytes.TryGetValue(cacheKey, out bytes) && bytes > 0) return bytes;
+            }
+            return EstimateBytes(decodeWidth, decodeHeight);
+        }
+
+        /// <summary>
+        /// 位图解码完成 / 失败时修正条目的真实字节占用。
+        /// 没有这一步，长图（480×3000 ≈ 5.5MB）会被按 480×720 ≈ 1.4MB 低估 4 倍，
+        /// 字节预算就形同虚设。
+        /// </summary>
+        private void HookBitmapSize(string key, BitmapImage bitmap)
+        {
+            try
+            {
+                bitmap.ImageOpened += (sender, args) => RefineEntryBytes(key, bitmap);
+                bitmap.ImageFailed += (sender, args) =>
                 {
-                    _lruKeys.Remove(key);
-                }
-                else
+                    lock (_lock) { RemoveEntryLocked(key); }
+                };
+
+                // 极端情况（本地磁盘缓存、瞬时解码）：事件可能在订阅前就已触发，补一次。
+                RefineEntryBytes(key, bitmap);
+            }
+            catch { }
+        }
+
+        private void RefineEntryBytes(string key, BitmapImage bitmap)
+        {
+            try
+            {
+                int w = bitmap.PixelWidth;
+                int h = bitmap.PixelHeight;
+                if (w <= 0 || h <= 0) return;
+
+                long bytes = (long)w * h * 4L;
+                lock (_lock)
                 {
-                    while (_memoryCache.Count >= MaxMemoryCacheItems && _lruKeys.Count > 0)
+                    RememberRealBytesLocked(key, bytes);
+                    if (_memoryCache.ContainsKey(key))
                     {
-                        string oldestKey = _lruKeys.Last.Value;
-                        _lruKeys.RemoveLast();
-                        _memoryCache.Remove(oldestKey);
+                        SetEntryBytesLocked(key, bytes);
+                        TrimMemoryCacheLocked();
                     }
                 }
-                _lruKeys.AddFirst(key);
-                _memoryCache[key] = bitmap;
             }
+            catch { }
+        }
+
+        /// <summary>记住实测字节数（即使该图已被缓存淘汰也不遗忘），并做条数上限清理。</summary>
+        private void RememberRealBytesLocked(string key, long bytes)
+        {
+            _knownBytes[key] = bytes;
+            if (_knownBytes.Count <= MaxKnownSizeEntries) return;
+
+            // 超限：优先丢掉「已不在缓存里」的记录（它们只用于估算，丢了顶多退回粗略值）
+            var drop = new List<string>();
+            foreach (var kv in _knownBytes)
+            {
+                if (!_memoryCache.ContainsKey(kv.Key)) drop.Add(kv.Key);
+            }
+            for (int i = 0; i < drop.Count; i++) _knownBytes.Remove(drop[i]);
+        }
+
+        /// <summary>更新某条目的字节占用（增量维护 _memoryCacheBytes，避免每次全量求和）。</summary>
+        private void SetEntryBytesLocked(string key, long bytes)
+        {
+            long old;
+            if (_entryBytes.TryGetValue(key, out old)) _memoryCacheBytes -= old;
+            _entryBytes[key] = bytes;
+            _memoryCacheBytes += bytes;
+        }
+
+        /// <summary>摘除一个缓存条目（同时维护 LRU 链与字节计数）。</summary>
+        private void RemoveEntryLocked(string key)
+        {
+            if (_memoryCache.Remove(key))
+            {
+                _lruKeys.Remove(key);
+                long b;
+                if (_entryBytes.TryGetValue(key, out b)) _memoryCacheBytes -= b;
+                _entryBytes.Remove(key);
+            }
+        }
+
+        /// <summary>
+        /// 按字节预算从 LRU 尾部淘汰。
+        /// 保留至少 1 条（单张超大图也不能把缓存清空到「刚插入就没了」）。
+        /// </summary>
+        private void TrimMemoryCacheLocked()
+        {
+            while ((_memoryCacheBytes > MaxMemoryCacheBytes || _memoryCache.Count > MaxMemoryCacheItems)
+                   && _memoryCache.Count > 1 && _lruKeys.Count > 0)
+            {
+                RemoveEntryLocked(_lruKeys.Last.Value);
+            }
+        }
+
+        /// <summary>
+        /// 从内存缓存里**彻底摘除**一张已解码位图，让 GC 能回收它占用的像素内存。
+        ///
+        /// 注意：**常规滚动/导航离屏不再调用本方法**（那会造成「滚回来就重新加载」）。
+        /// 现在只有需要主动放弃某张图时才用；日常回收由 <see cref="TrimMemoryCacheLocked"/>
+        /// 的字节预算自动完成。
+        /// </summary>
+        public void EvictMemoryCache(string url, int decodeWidth, int decodeHeight = 0)
+        {
+            if (string.IsNullOrWhiteSpace(url)) return;
+
+            string cacheKey = string.Format("{0}_w{1}_h{2}", url, decodeWidth, decodeHeight);
+            lock (_lock) { RemoveEntryLocked(cacheKey); }
         }
 
         public async Task<byte[]> GetImageBytesAsync(string url)
@@ -579,6 +752,10 @@ namespace KuroBBS.Services
                 lock (_lock)
                 {
                     _memoryCache.Clear();
+                    _lruKeys.Clear();
+                    _entryBytes.Clear();
+                    _knownBytes.Clear();
+                    _memoryCacheBytes = 0;
                     _diskFileCache.Clear();
                     _inFlightUrls.Clear();
                 }

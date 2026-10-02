@@ -225,11 +225,15 @@ namespace KuroBBS.ViewModels
             CloseImage();
             ViewerImages.Clear();
             KuroLogger.Trace("WIKI_DETAIL_BEGIN id=" + entryId);
+            // 进入条目时的内存基线：若这里就已经很高（>100MB），说明是「浏览多个条目后的累积」
+            // 把进程顶到上限，而不是本页内容本身重（见 KuroWikiService 的有界缓存说明）。
+            KuroLogger.Mem("wiki.begin");
             try
             {
                 var detail = await KuroWikiService.Instance.GetEntryDetailAsync(wikiType, entryId, forceRefresh);
                 KuroLogger.Trace("WIKI_DETAIL_FETCHED modules=" + (detail != null && detail.Modules != null ? detail.Modules.Count : -1)
                                  + " comps=" + CountComponents(detail));
+                KuroLogger.Mem("wiki.parsed");
                 Detail = detail;
                 Modules.Clear();
                 if (detail != null && detail.Modules != null)
@@ -247,6 +251,7 @@ namespace KuroBBS.ViewModels
                 }
 
                 KuroLogger.Trace("WIKI_DETAIL_MODULES_ADDED");
+                KuroLogger.Mem("wiki.modules_added");
                 Contributors.Clear();
                 if (detail != null && detail.Contributors != null)
                 {
@@ -256,6 +261,7 @@ namespace KuroBBS.ViewModels
                     }
                 }
                 KuroLogger.Trace("WIKI_DETAIL_DONE contributors=" + Contributors.Count);
+                KuroLogger.Mem("wiki.done");
             }
             catch (Exception ex)
             {
@@ -265,6 +271,7 @@ namespace KuroBBS.ViewModels
             finally
             {
                 IsBusy = false;
+                KuroLogger.Mem("wiki.finally");
             }
         }
 

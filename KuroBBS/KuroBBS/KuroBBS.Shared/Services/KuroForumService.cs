@@ -7,6 +7,20 @@ using KuroBBS.Models;
 
 namespace KuroBBS.Services
 {
+    public sealed class FollowingDynamicPageResult
+    {
+        public List<PostItem> Posts { get; private set; }
+        public List<UserFollowItem> Follows { get; private set; }
+        public bool HasNext { get; set; }
+        public bool HasFollowList { get; set; }
+
+        public FollowingDynamicPageResult()
+        {
+            Posts = new List<PostItem>();
+            Follows = new List<UserFollowItem>();
+        }
+    }
+
     public class KuroForumService
     {
         private static KuroForumService _instance;
@@ -20,6 +34,106 @@ namespace KuroBBS.Services
                 }
                 return _instance;
             }
+        }
+
+        public async Task<FollowingDynamicPageResult> GetFollowingDynamicPageAsync(int gameId, int pageIndex = 1, int pageSize = 20, string targetUserId = null)
+        {
+            var result = new FollowingDynamicPageResult();
+            if (gameId <= 0) gameId = 3;
+
+            var parameters = new Dictionary<string, string>
+            {
+                { "pageIndex", pageIndex.ToString() },
+                { "pageSize", pageSize.ToString() }
+            };
+            if (!string.IsNullOrEmpty(targetUserId))
+            {
+                parameters["targetUserIds"] = targetUserId;
+            }
+
+            KuroLogger.Loading("FOLLOWING_DYNAMIC", string.Format("Loading following dynamics: page={0}, target={1}", pageIndex, string.IsNullOrEmpty(targetUserId) ? "all" : targetUserId));
+            var json = await KuroApiClient.Instance.PostFormAsync("/forum/dynamic/list", parameters);
+            if (json == null || !json.ContainsKey("data") || json.GetNamedValue("data").ValueType != JsonValueType.Object)
+            {
+                return result;
+            }
+
+            var dataObj = json.GetNamedObject("data");
+            int dynamicCount = 0;
+            if (dataObj.ContainsKey("dynamic") && dataObj.GetNamedValue("dynamic").ValueType == JsonValueType.Array)
+            {
+                var dynamicArray = dataObj.GetNamedArray("dynamic");
+                dynamicCount = dynamicArray.Count;
+                foreach (var itemValue in dynamicArray)
+                {
+                    if (itemValue.ValueType != JsonValueType.Object) continue;
+                    var post = ParseCommunityPostItem(itemValue.GetObject(), gameId);
+                    if (post != null) result.Posts.Add(post);
+                }
+            }
+
+            if (dataObj.ContainsKey("follows") && dataObj.GetNamedValue("follows").ValueType == JsonValueType.Array)
+            {
+                result.HasFollowList = true;
+                foreach (var itemValue in dataObj.GetNamedArray("follows"))
+                {
+                    if (itemValue.ValueType != JsonValueType.Object) continue;
+                    var itemObj = itemValue.GetObject();
+                    var follow = new UserFollowItem
+                    {
+                        UserId = GetString(itemObj, "userId", GetString(itemObj, "followUserId", GetString(itemObj, "targetUserId", ""))),
+                        UserName = GetString(itemObj, "userName", GetString(itemObj, "followUserName", GetString(itemObj, "name", "用户"))),
+                        AvatarUrl = GetString(itemObj, "userHeadUrl", GetString(itemObj, "headUrl", GetString(itemObj, "avatarUrl", GetString(itemObj, "followUserUrl", "")))),
+                        HeadFrameUrl = GetString(itemObj, "headFrameUrl", ""),
+                        Signature = GetString(itemObj, "signature", GetString(itemObj, "userSign", "这个人很懒，还没有签名。")),
+                        FansCount = (int)GetNumber(itemObj, "fansCount", 0),
+                        PostCount = (int)GetNumber(itemObj, "postCount", 0),
+                        IdentifyClassify = (int)GetNumber(itemObj, "identifyClassify", 0),
+                        IsFollow = GetBoolean(itemObj, "isFollow", true),
+                        MutualFollow = GetBoolean(itemObj, "mutualFollow", false)
+                    };
+
+                    if (itemObj.ContainsKey("newIdentifyNames") && itemObj.GetNamedValue("newIdentifyNames").ValueType == JsonValueType.Array)
+                    {
+                        foreach (var nameValue in itemObj.GetNamedArray("newIdentifyNames"))
+                        {
+                            if (nameValue.ValueType == JsonValueType.String && !string.IsNullOrWhiteSpace(nameValue.GetString()))
+                            {
+                                follow.IdentifyNames.Add(nameValue.GetString());
+                            }
+                        }
+                    }
+                    else if (itemObj.ContainsKey("identifyNames"))
+                    {
+                        var identityValue = itemObj.GetNamedValue("identifyNames");
+                        if (identityValue.ValueType == JsonValueType.Array)
+                        {
+                            foreach (var nameValue in identityValue.GetArray())
+                            {
+                                if (nameValue.ValueType == JsonValueType.String && !string.IsNullOrWhiteSpace(nameValue.GetString()))
+                                {
+                                    follow.IdentifyNames.Add(nameValue.GetString());
+                                }
+                            }
+                        }
+                        else
+                        {
+                            string identityText = GetString(itemObj, "identifyNames", "");
+                            foreach (var name in identityText.Split(new[] { '、', ',', '，' }, StringSplitOptions.RemoveEmptyEntries))
+                            {
+                                string trimmed = name.Trim();
+                                if (!string.IsNullOrEmpty(trimmed)) follow.IdentifyNames.Add(trimmed);
+                            }
+                        }
+                    }
+                    result.Follows.Add(follow);
+                }
+            }
+
+            result.HasNext = dataObj.ContainsKey("hasNext")
+                ? GetBoolean(dataObj, "hasNext", dynamicCount >= pageSize)
+                : dynamicCount >= pageSize;
+            return result;
         }
 
         public async Task<List<PostItem>> GetCommunityPostsAsync(int gameId, int forumId = 0, int searchType = 3, int pageIndex = 1, int pageSize = 20)
@@ -335,17 +449,53 @@ namespace KuroBBS.Services
             return json != null && json.ContainsKey("code") && json.GetNamedNumber("code") == 200;
         }
 
+        private void ParseAuthorIdentityNames(JsonObject obj, PostAuthor author)
+        {
+            if (obj == null || author == null || (author.IdentityNames != null && author.IdentityNames.Count > 0)) return;
+            string[] keys = new[] { "newIdentifyNames", "identifyNames", "userIdentifyNames", "identifyName" };
+            foreach (var key in keys)
+            {
+                if (!obj.ContainsKey(key)) continue;
+                var value = obj.GetNamedValue(key);
+                if (value.ValueType == JsonValueType.Array)
+                {
+                    foreach (var nameValue in value.GetArray())
+                    {
+                        if (nameValue.ValueType == JsonValueType.String)
+                        {
+                            string name = nameValue.GetString().Trim();
+                            if (!string.IsNullOrEmpty(name)) author.IdentityNames.Add(name);
+                        }
+                    }
+                }
+                else if (value.ValueType == JsonValueType.String)
+                {
+                    string identityText = value.GetString();
+                    foreach (var name in identityText.Split(new[] { '、', ',', '，' }, StringSplitOptions.RemoveEmptyEntries))
+                    {
+                        string trimmed = name.Trim();
+                        if (!string.IsNullOrEmpty(trimmed)) author.IdentityNames.Add(trimmed);
+                    }
+                }
+                if (author.IdentityNames.Count > 0) return;
+            }
+        }
+
         public PostItem ParseCommunityPostItem(JsonObject obj, int defaultGameId)
         {
             try
             {
                 var post = new PostItem();
-                post.PostId = GetString(obj, "postId", GetString(obj, "id", ""));
+                post.PostId = GetString(obj, "postId", GetString(obj, "id", GetString(obj, "gamePostId", "")));
                 post.GameId = (int)GetNumber(obj, "gameId", defaultGameId);
                 post.GameName = post.GameId == 2 ? "战双帕弥什" : post.GameId == 3 ? "鸣潮" : GetString(obj, "gameName", "综合");
                 post.Title = GetString(obj, "postTitle", GetString(obj, "title", ""));
                 // Content summary & text extraction
                 string rawPostContent = GetString(obj, "postContent", "");
+                if (string.IsNullOrEmpty(rawPostContent) && obj.ContainsKey("postContent") && obj.GetNamedValue("postContent").ValueType == JsonValueType.Array)
+                {
+                    rawPostContent = obj.GetNamedArray("postContent").Stringify();
+                }
                 string cleanTextContent = "";
                 var seenImgUrls = new HashSet<string>();
 
@@ -425,10 +575,11 @@ namespace KuroBBS.Services
                 post.IsFollow = post.Author.IsFollow;
                 post.PostTimeStr = GetString(obj, "showTime", "刚刚");
 
-                post.Author.UserId = GetString(obj, "userId", "");
-                post.Author.UserName = GetString(obj, "userName", "漫游者");
+                post.Author.UserId = GetString(obj, "postUserId", GetString(obj, "userId", ""));
+                post.Author.UserName = GetString(obj, "userName", GetString(obj, "postUserName", "漫游者"));
                 post.Author.AvatarUrl = GetString(obj, "userHeadUrl", GetString(obj, "headUrl", GetString(obj, "avatarUrl", "")));
                 post.Author.IpRegion = GetString(obj, "ipRegion", "未知");
+                ParseAuthorIdentityNames(obj, post.Author);
 
                 if (obj.ContainsKey("user") && obj.GetNamedValue("user").ValueType == JsonValueType.Object)
                 {
@@ -438,6 +589,7 @@ namespace KuroBBS.Services
                     var uHead = GetString(uObj, "headUrl", GetString(uObj, "userHeadUrl", GetString(uObj, "avatarUrl", "")));
                     if (!string.IsNullOrEmpty(uHead)) post.Author.AvatarUrl = uHead;
                     post.Author.IpRegion = GetString(uObj, "ipRegion", post.Author.IpRegion);
+                    ParseAuthorIdentityNames(uObj, post.Author);
                 }
 
                 post.VideoId = GetString(obj, "videoId", "");

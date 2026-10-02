@@ -18,6 +18,20 @@ namespace KuroBBS.ViewModels
             set { _communityPosts = value; OnPropertyChanged(); }
         }
 
+        private ObservableCollection<PostItem> _followingPosts;
+        public ObservableCollection<PostItem> FollowingPosts
+        {
+            get { return _followingPosts; }
+            set { _followingPosts = value; OnPropertyChanged(); OnPropertyChanged("HasFollowingPosts"); OnPropertyChanged("FollowingEmptyMessage"); }
+        }
+
+        private ObservableCollection<UserFollowItem> _followingUsers;
+        public ObservableCollection<UserFollowItem> FollowingUsers
+        {
+            get { return _followingUsers; }
+            set { _followingUsers = value; OnPropertyChanged(); OnPropertyChanged("HasFollowingUsers"); OnPropertyChanged("FollowingEmptyMessage"); }
+        }
+
         private ObservableCollection<PostItem> _newsList;
         public ObservableCollection<PostItem> NewsList
         {
@@ -63,6 +77,48 @@ namespace KuroBBS.ViewModels
         }
 
         public bool HasCommendFollows { get { return _commendFollows != null && _commendFollows.Count > 0; } }
+
+        public bool HasFollowingPosts { get { return _followingPosts != null && _followingPosts.Count > 0; } }
+        public bool HasFollowingUsers { get { return _followingUsers != null && _followingUsers.Count > 0; } }
+
+        // 消息中心：与 MainPage 的 消息 Pivot 共用同一实例（红点 + 各 tab 数据同源）
+        private readonly MessageHubViewModel _messageHubVm = new MessageHubViewModel();
+        public MessageHubViewModel MessageHubVm { get { return _messageHubVm; } }
+
+        private bool _isFollowingLoading;
+        public bool IsFollowingLoading
+        {
+            get { return _isFollowingLoading; }
+            set
+            {
+                if (_isFollowingLoading != value)
+                {
+                    _isFollowingLoading = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged("ShouldShowFollowingEmpty");
+                }
+            }
+        }
+
+        public bool ShouldShowFollowingEmpty { get { return !HasFollowingPosts && !IsFollowingLoading; } }
+
+        private bool _isAllFollowingSelected = true;
+        public bool IsAllFollowingSelected
+        {
+            get { return _isAllFollowingSelected; }
+            private set { _isAllFollowingSelected = value; OnPropertyChanged(); }
+        }
+
+        private string _selectedFollowingUserId;
+        public string FollowingEmptyMessage
+        {
+            get
+            {
+                if (!SettingsHelper.IsLoggedIn) return "登录后查看关注动态";
+                if (!HasFollowingUsers) return "你还没有关注的用户";
+                return "暂无关注动态";
+            }
+        }
 
         private SignInStatus _signInInfo;
         public SignInStatus SignInInfo
@@ -357,10 +413,18 @@ namespace KuroBBS.ViewModels
 
         private int _communityPage = 1;
         private int _newsPage = 1;
+        private int _followingPage = 1;
         private bool _hasMoreCommunity = true;
         private bool _hasMoreNews = true;
+        private bool _hasMoreFollowing = true;
+        private bool _isLoadingFollowing;
+        private bool _followingReloadPending;
+        private bool _followingAccountsReloadPending;
+        private bool _followingFeedInitialized;
+        private int _followingRequestVersion;
 
         private readonly HashSet<string> _communityPostIds = new HashSet<string>();
+        private readonly HashSet<string> _followingPostIds = new HashSet<string>();
         private readonly HashSet<string> _newsPostIds = new HashSet<string>();
 
         public ICommand RefreshCommand { get; private set; }
@@ -384,6 +448,8 @@ namespace KuroBBS.ViewModels
         public MainViewModel()
         {
             CommunityPosts = new ObservableCollection<PostItem>();
+            FollowingPosts = new ObservableCollection<PostItem>();
+            FollowingUsers = new ObservableCollection<UserFollowItem>();
             NewsList = new ObservableCollection<PostItem>();
             Roles = new ObservableCollection<GameRoleCard>();
             GameWikiList = new ObservableCollection<GameWikiItem>();
@@ -489,6 +555,21 @@ namespace KuroBBS.ViewModels
             KuroLogger.ThreadInfo("UI Navigate", "MainPage NavigatedTo - Starting initial data synchronization");
             var _ = KuroEmojiService.Instance.InitializeAsync();
             await RefreshAllAsync();
+            await LoadMessageUnreadAsync();
+        }
+
+        /// <summary>刷新消息中心未读汇总（供主界面红点使用）。</summary>
+        public async Task LoadMessageUnreadAsync()
+        {
+            if (!SettingsHelper.IsLoggedIn) return;
+            try
+            {
+                await _messageHubVm.LoadUnreadAsync();
+            }
+            catch (Exception ex)
+            {
+                KuroLogger.Warn("MSG_UNREAD", "加载消息未读失败: " + ex.Message);
+            }
         }
 
         public async Task RefreshUserProfileIfLoggedInAsync()
@@ -578,7 +659,18 @@ namespace KuroBBS.ViewModels
             var t1 = LoadCommunityPostsAsync(true);
             var t2 = LoadNewsListAsync(true);
             var t3 = LoadGameWikiAsync();
-            await Task.WhenAll(t1, t2, t3);
+            Task t4 = Task.FromResult(0);
+            if (_followingFeedInitialized)
+            {
+                _selectedFollowingUserId = null;
+                IsAllFollowingSelected = true;
+                if (FollowingUsers != null)
+                {
+                    foreach (var user in FollowingUsers) user.IsSelected = false;
+                }
+                t4 = LoadFollowingFeedAsync(true, true);
+            }
+            await Task.WhenAll(t1, t2, t3, t4);
         }
 
         public async Task LoadGameWikiAsync()
@@ -774,6 +866,155 @@ namespace KuroBBS.ViewModels
             KuroLogger.Loading("NEWS_PAGE_MORE", "Loading news page " + _newsPage);
             await LoadNewsListAsync(false);
             IsBusy = false;
+        }
+
+        public async Task EnsureFollowingFeedLoadedAsync()
+        {
+            if (_followingFeedInitialized) return;
+            _followingFeedInitialized = true;
+            await LoadFollowingFeedAsync(true, true);
+        }
+
+        public async Task SelectFollowingUserAsync(UserFollowItem user)
+        {
+            if (user == null || string.IsNullOrEmpty(user.UserId)) return;
+            if (!_isAllFollowingSelected && string.Equals(_selectedFollowingUserId, user.UserId, StringComparison.Ordinal)) return;
+
+            _selectedFollowingUserId = user.UserId;
+            IsAllFollowingSelected = false;
+            foreach (var follow in FollowingUsers) follow.IsSelected = string.Equals(follow.UserId, user.UserId, StringComparison.Ordinal);
+            await LoadFollowingFeedAsync(true, false);
+        }
+
+        public async Task SelectAllFollowingAsync()
+        {
+            if (_isAllFollowingSelected && string.IsNullOrEmpty(_selectedFollowingUserId)) return;
+            _selectedFollowingUserId = null;
+            IsAllFollowingSelected = true;
+            foreach (var follow in FollowingUsers) follow.IsSelected = false;
+            await LoadFollowingFeedAsync(true, false);
+        }
+
+        public async Task LoadFollowingFeedAsync(bool resetPage = false, bool reloadFollowedUsers = false)
+        {
+            _followingFeedInitialized = true;
+            if (resetPage)
+            {
+                _followingPage = 1;
+                _hasMoreFollowing = true;
+                _followingRequestVersion++;
+                _followingPostIds.Clear();
+                await RunOnUIThread(() =>
+                {
+                    FollowingPosts.Clear();
+                    if (reloadFollowedUsers) FollowingUsers.Clear();
+                    RefreshFollowingState();
+                });
+            }
+
+            if (!SettingsHelper.IsLoggedIn)
+            {
+                _hasMoreFollowing = false;
+                _selectedFollowingUserId = null;
+                IsAllFollowingSelected = true;
+                await RunOnUIThread(() =>
+                {
+                    FollowingPosts.Clear();
+                    FollowingUsers.Clear();
+                    RefreshFollowingState();
+                });
+                return;
+            }
+
+            if (_isLoadingFollowing)
+            {
+                if (resetPage)
+                {
+                    _followingReloadPending = true;
+                    _followingAccountsReloadPending = _followingAccountsReloadPending || reloadFollowedUsers;
+                }
+                return;
+            }
+            if (!resetPage && !_hasMoreFollowing) return;
+
+            _isLoadingFollowing = true;
+            int requestVersion = _followingRequestVersion;
+            int requestedPage = _followingPage;
+            string targetUserId = _selectedFollowingUserId;
+            await RunOnUIThread(() => IsFollowingLoading = true);
+
+            bool requestSucceeded = false;
+            try
+            {
+                var result = await KuroForumService.Instance.GetFollowingDynamicPageAsync(SelectedGameId, requestedPage, 20, targetUserId);
+                if (requestVersion == _followingRequestVersion && result != null)
+                {
+                    await RunOnUIThread(() =>
+                    {
+                        if (requestVersion != _followingRequestVersion) return;
+                        if (reloadFollowedUsers && result.HasFollowList)
+                        {
+                            FollowingUsers.Clear();
+                            foreach (var user in result.Follows)
+                            {
+                                user.IsSelected = !string.IsNullOrEmpty(_selectedFollowingUserId) && string.Equals(user.UserId, _selectedFollowingUserId, StringComparison.Ordinal);
+                                FollowingUsers.Add(user);
+                            }
+                        }
+
+                        int newItemsCount = 0;
+                        foreach (var post in result.Posts)
+                        {
+                            string id = !string.IsNullOrEmpty(post.PostId)
+                                ? post.PostId
+                                : (post.Author != null ? post.Author.UserId : "") + "|" + post.Title + "|" + post.PostTimeStr;
+                            if (!string.IsNullOrEmpty(id) && !_followingPostIds.Add(id)) continue;
+                            FollowingPosts.Add(post);
+                            newItemsCount++;
+                        }
+                        _hasMoreFollowing = result.HasNext && newItemsCount > 0;
+                        RefreshFollowingState();
+                    });
+                    requestSucceeded = true;
+                    KuroLogger.Loading("FOLLOWING_RENDER", string.Format("Following page {0}: {1} posts, {2} followed accounts", requestedPage, result.Posts.Count, FollowingUsers.Count));
+                }
+            }
+            catch (Exception ex)
+            {
+                KuroLogger.Warn("FOLLOWING_LOAD_ERR", "Failed to load following dynamics: " + ex.Message);
+            }
+
+            if (!requestSucceeded && requestVersion == _followingRequestVersion && _followingPage == requestedPage && requestedPage > 1)
+            {
+                _followingPage--;
+            }
+
+            _isLoadingFollowing = false;
+            await RunOnUIThread(() => IsFollowingLoading = false);
+
+            if (_followingReloadPending)
+            {
+                bool reloadUsers = _followingAccountsReloadPending;
+                _followingReloadPending = false;
+                _followingAccountsReloadPending = false;
+                await LoadFollowingFeedAsync(true, reloadUsers);
+            }
+        }
+
+        public async Task LoadMoreFollowingAsync()
+        {
+            if (_isLoadingFollowing || !_hasMoreFollowing) return;
+            _followingPage++;
+            KuroLogger.Loading("FOLLOWING_PAGE_MORE", "Auto-loading following dynamics page " + _followingPage);
+            await LoadFollowingFeedAsync(false, false);
+        }
+
+        private void RefreshFollowingState()
+        {
+            OnPropertyChanged("HasFollowingPosts");
+            OnPropertyChanged("HasFollowingUsers");
+            OnPropertyChanged("FollowingEmptyMessage");
+            OnPropertyChanged("ShouldShowFollowingEmpty");
         }
 
         public async Task LoadProfileAndRolesAsync()

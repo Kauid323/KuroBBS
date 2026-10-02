@@ -14,8 +14,8 @@
     <Page.Resources>
         <!-- 段内「有序块」模板：文字 -->
         <DataTemplate x:Key="WikiBlockTextTemplate">
-            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Margin="0,0,0,6">
-                <RichTextBlock helpers:InlineRunsHelper.RunsSource="{Binding Runs}" FontSize="11" Foreground="#C8C8D8" LineHeight="17" />
+            <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Disabled" Margin="0,0,0,6">
+                <RichTextBlock helpers:InlineRunsHelper.RunsSource="{Binding Runs}" FontSize="11" Foreground="#C8C8D8" LineHeight="17" TextWrapping="Wrap" />
             </ScrollViewer>
         </DataTemplate>
 
@@ -627,8 +627,8 @@
                                                                                     </StackPanel>
 
                                                                                     <!-- Right: Skill Description (Rich Colored) -->
-                                                                                    <ScrollViewer Grid.Column="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Margin="8,0,0,0" VerticalAlignment="Center">
-                                                                                        <RichTextBlock helpers:InlineRunsHelper.RunsSource="{Binding Runs}" FontSize="11" Foreground="#D0D0DC" LineHeight="17" />
+                                                                                    <ScrollViewer Grid.Column="1" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Disabled" Margin="8,0,0,0" VerticalAlignment="Center">
+                                                                                        <RichTextBlock helpers:InlineRunsHelper.RunsSource="{Binding Runs}" FontSize="11" Foreground="#D0D0DC" LineHeight="17" TextWrapping="Wrap" />
                                                                                     </ScrollViewer>
                                                                                 </Grid>
                                                                             </Border>
@@ -667,9 +667,9 @@
 
                                                                                             <!-- 兜底：没有有序块时才走旧的「整段文本 + 单张预览图」 -->
                                                                                             <StackPanel Visibility="{Binding HasBlocks, Converter={StaticResource InvBoolToVis}}">
-                                                                                                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Margin="0,0,0,6"
+                                                                                                <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Disabled" Margin="0,0,0,6"
                                                                                                               Visibility="{Binding HasRuns, Converter={StaticResource BoolToVis}}">
-                                                                                                    <RichTextBlock helpers:InlineRunsHelper.RunsSource="{Binding Runs}" FontSize="11" Foreground="#C8C8D8" LineHeight="17" />
+                                                                                                    <RichTextBlock helpers:InlineRunsHelper.RunsSource="{Binding Runs}" FontSize="11" Foreground="#C8C8D8" LineHeight="17" TextWrapping="Wrap" />
                                                                                                 </ScrollViewer>
 
                                                                                                 <Border Background="#101016" Margin="0,0,0,6" Visibility="{Binding HasImage, Converter={StaticResource BoolToVis}}">
@@ -685,9 +685,9 @@
                                                                                                         <Border Background="#14141E" BorderBrush="#262636" BorderThickness="1" Padding="8" Margin="0,0,0,6">
                                                                                                             <StackPanel>
                                                                                                                 <TextBlock Text="{Binding Title}" FontSize="11" FontWeight="Bold" Foreground="{StaticResource MetroAccentBrush}" Margin="0,0,0,4" />
-                                                                                                                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Margin="0,0,0,4"
+                                                                                                                <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Disabled" Margin="0,0,0,4"
                                                                                                                               Visibility="{Binding HasRuns, Converter={StaticResource BoolToVis}}">
-                                                                                                                    <RichTextBlock helpers:InlineRunsHelper.RunsSource="{Binding Runs}" FontSize="11" Foreground="#B0B0C0" LineHeight="16" />
+                                                                                                                    <RichTextBlock helpers:InlineRunsHelper.RunsSource="{Binding Runs}" FontSize="11" Foreground="#B0B0C0" LineHeight="16" TextWrapping="Wrap" />
                                                                                                                 </ScrollViewer>
                                                                                                                 <Border Background="#0C0C12" Visibility="{Binding HasImage, Converter={StaticResource BoolToVis}}">
                                                                                                                     <Image helpers:KuroGifHelper.GifSource="{Binding ImageUrl}"
@@ -721,8 +721,8 @@
                                                                                         <TextBlock Text="{Binding Tag}" FontSize="10" FontWeight="SemiBold" Foreground="{StaticResource MetroAccentBrush}" TextAlignment="Center" TextWrapping="Wrap" />
                                                                                     </Border>
                                                                                     <!-- Dialogue script (Rich Colored) -->
-                                                                                    <ScrollViewer Grid.Column="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Margin="8,0,0,0" VerticalAlignment="Center">
-                                                                                        <RichTextBlock helpers:InlineRunsHelper.RunsSource="{Binding Runs}" FontSize="11" Foreground="#DCDCE8" LineHeight="17" />
+                                                                                    <ScrollViewer Grid.Column="1" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Disabled" Margin="8,0,0,0" VerticalAlignment="Center">
+                                                                                        <RichTextBlock helpers:InlineRunsHelper.RunsSource="{Binding Runs}" FontSize="11" Foreground="#DCDCE8" LineHeight="17" TextWrapping="Wrap" />
                                                                                     </ScrollViewer>
                                                                                 </Grid>
                                                                             </Border>
@@ -771,9 +771,9 @@
                                                                                         </ScrollViewer>
 
                                                                                         <!-- Rich Colored Text Description (API 文字颜色完整呈现，支持左右横向滚动) -->
-                                                                                        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"
+                                                                                        <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Disabled"
                                                                                                       Visibility="{Binding HasRuns, Converter={StaticResource BoolToVis}}">
-                                                                                            <RichTextBlock helpers:InlineRunsHelper.RunsSource="{Binding Runs}" FontSize="11" Foreground="#C8C8D8" LineHeight="17" />
+                                                                                            <RichTextBlock helpers:InlineRunsHelper.RunsSource="{Binding Runs}" FontSize="11" Foreground="#C8C8D8" LineHeight="17" TextWrapping="Wrap" />
                                                                                         </ScrollViewer>
                                                                                     </StackPanel>
                                                                                 </Border>
@@ -828,9 +828,9 @@
                                                                                                         <TextBlock Text="{Binding SubInfo}" FontSize="11" Foreground="#4FC3F7" TextWrapping="Wrap" Margin="0,2,0,0"
                                                                                                                    Visibility="{Binding HasSubInfo, Converter={StaticResource BoolToVis}}" />
 
-                                                                                                        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Margin="0,2,0,0"
+                                                                                                        <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Disabled" Margin="0,2,0,0"
                                                                                                                       Visibility="{Binding HasRuns, Converter={StaticResource BoolToVis}}">
-                                                                                                            <RichTextBlock helpers:InlineRunsHelper.RunsSource="{Binding Runs}" FontSize="10" Foreground="{StaticResource MetroSubTextBrush}" LineHeight="15" />
+                                                                                                            <RichTextBlock helpers:InlineRunsHelper.RunsSource="{Binding Runs}" FontSize="10" Foreground="{StaticResource MetroSubTextBrush}" LineHeight="15" TextWrapping="Wrap" />
                                                                                                         </ScrollViewer>
                                                                                                     </StackPanel>
 
@@ -848,8 +848,8 @@
                                                                                 <!-- Tip / Advice Box (if any with Rich API colors) -->
                                                                                 <Border Background="#141420" BorderBrush="#242436" BorderThickness="1" Padding="8,6" Margin="0,2,0,0"
                                                                                         Visibility="{Binding Tip, Converter={StaticResource NullToVis}}">
-                                                                                    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-                                                                                        <RichTextBlock helpers:InlineRunsHelper.RunsSource="{Binding TipRuns}" FontSize="11" Foreground="#A0A0B8" LineHeight="16" />
+                                                                                    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Disabled">
+                                                                                        <RichTextBlock helpers:InlineRunsHelper.RunsSource="{Binding TipRuns}" FontSize="11" Foreground="#A0A0B8" LineHeight="16" TextWrapping="Wrap" />
                                                                                     </ScrollViewer>
                                                                                 </Border>
                                                                             </StackPanel>
@@ -873,9 +873,9 @@
 
                                                                 <!-- 2.6 Simple Rich Text & Images Fallback (API 原始富文本色彩) -->
                                                                 <StackPanel Visibility="{Binding HasActiveTabSimpleText, Converter={StaticResource BoolToVis}}">
-                                                                    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Margin="0,0,0,8"
+                                                                    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Disabled" Margin="0,0,0,8"
                                                                                   Visibility="{Binding HasActiveTabRuns, Converter={StaticResource BoolToVis}}">
-                                                                        <RichTextBlock helpers:InlineRunsHelper.RunsSource="{Binding ActiveTabRuns}" FontSize="12" Foreground="#D0D0DC" LineHeight="19" />
+                                                                        <RichTextBlock helpers:InlineRunsHelper.RunsSource="{Binding ActiveTabRuns}" FontSize="12" Foreground="#D0D0DC" LineHeight="19" TextWrapping="Wrap" />
                                                                     </ScrollViewer>
                                                                     <ItemsControl ItemsSource="{Binding ActiveTabImages}" Visibility="{Binding HasActiveTabImages, Converter={StaticResource BoolToVis}}">
                                                                         <ItemsControl.ItemTemplate>
@@ -974,9 +974,9 @@
                                                                                               Visibility="{Binding HasBlocks, Converter={StaticResource BoolToVis}}" />
 
                                                                                 <StackPanel Visibility="{Binding HasBlocks, Converter={StaticResource InvBoolToVis}}">
-                                                                                    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Margin="0,0,0,6"
+                                                                                    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Disabled" Margin="0,0,0,6"
                                                                                                   Visibility="{Binding HasRuns, Converter={StaticResource BoolToVis}}">
-                                                                                        <RichTextBlock helpers:InlineRunsHelper.RunsSource="{Binding Runs}" FontSize="11" Foreground="#C8C8D8" LineHeight="17" />
+                                                                                        <RichTextBlock helpers:InlineRunsHelper.RunsSource="{Binding Runs}" FontSize="11" Foreground="#C8C8D8" LineHeight="17" TextWrapping="Wrap" />
                                                                                     </ScrollViewer>
                                                                                     <Border Background="#101016" Margin="0,0,0,6" Visibility="{Binding HasImage, Converter={StaticResource BoolToVis}}">
                                                                                         <Image helpers:KuroGifHelper.GifSource="{Binding ImageUrl}"
@@ -997,9 +997,9 @@
                                                                                                                   ItemTemplateSelector="{StaticResource WikiBlockSelector}"
                                                                                                                   Visibility="{Binding HasBlocks, Converter={StaticResource BoolToVis}}" />
                                                                                                     <StackPanel Visibility="{Binding HasBlocks, Converter={StaticResource InvBoolToVis}}">
-                                                                                                        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Margin="0,0,0,4"
+                                                                                                        <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Disabled" Margin="0,0,0,4"
                                                                                                                       Visibility="{Binding HasRuns, Converter={StaticResource BoolToVis}}">
-                                                                                                            <RichTextBlock helpers:InlineRunsHelper.RunsSource="{Binding Runs}" FontSize="11" Foreground="#B0B0C0" LineHeight="16" />
+                                                                                                            <RichTextBlock helpers:InlineRunsHelper.RunsSource="{Binding Runs}" FontSize="11" Foreground="#B0B0C0" LineHeight="16" TextWrapping="Wrap" />
                                                                                                         </ScrollViewer>
                                                                                                         <Border Background="#0C0C12" Visibility="{Binding HasImage, Converter={StaticResource BoolToVis}}">
                                                                                                             <Image helpers:KuroGifHelper.GifSource="{Binding ImageUrl}"
@@ -1030,8 +1030,8 @@
 
                                                     <!-- Clean Formatted Text with Colors -->
                                                     <Border Background="#161620" BorderBrush="#282836" BorderThickness="1" Padding="10" Margin="0,0,0,6">
-                                                        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-                                                            <RichTextBlock helpers:InlineRunsHelper.RunsSource="{Binding Runs}" FontSize="12" Foreground="#D0D0DC" LineHeight="19" />
+                                                        <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Disabled">
+                                                            <RichTextBlock helpers:InlineRunsHelper.RunsSource="{Binding Runs}" FontSize="12" Foreground="#D0D0DC" LineHeight="19" TextWrapping="Wrap" />
                                                         </ScrollViewer>
                                                     </Border>
                                                 </StackPanel>

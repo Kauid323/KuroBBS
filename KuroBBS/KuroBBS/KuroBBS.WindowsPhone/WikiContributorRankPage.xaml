@@ -1,0 +1,75 @@
+<Page
+    x:Name="RankRoot"
+    x:Class="KuroBBS.WikiContributorRankPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:helpers="using:KuroBBS.Helpers"
+    xmlns:models="using:KuroBBS.Models"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+
+    <Page.BottomAppBar>
+        <CommandBar Background="#121216" ClosedDisplayMode="Minimal" IsOpen="False">
+            <AppBarButton Icon="Back" Label="返回" Click="OnBackClick" />
+            <AppBarButton Icon="Refresh" Label="刷新" Click="OnRefreshClick" />
+        </CommandBar>
+    </Page.BottomAppBar>
+
+    <Page.Resources>
+        <!-- 贡献榜单行：名次 / 头像 / 昵称 / 积分 -->
+        <DataTemplate x:Key="RankRowTemplate">
+            <Border Background="#1A1A22" BorderBrush="#26262E" BorderThickness="1"
+                    Margin="0,0,0,4" Padding="10,8"
+                    Tapped="OnRowTapped" Tag="{Binding}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="38" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="{Binding RankNumberText}" FontSize="16" FontWeight="Bold"
+                               Foreground="{StaticResource MetroGoldBrush}" VerticalAlignment="Center" />
+                    <Border Grid.Column="1" Width="34" Height="34" Background="#141418" Margin="0,0,10,0">
+                        <Image Source="{Binding UserHeadUrl, Converter={StaticResource ImageCache}, ConverterParameter=72}"
+                               Stretch="UniformToFill" />
+                    </Border>
+                    <TextBlock Grid.Column="2" Text="{Binding UserName}" FontSize="14" Foreground="White"
+                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Grid.Column="3" Text="{Binding Score}" FontSize="13"
+                               Foreground="{StaticResource MetroSubTextBrush}" VerticalAlignment="Center" Margin="8,0,0,0" />
+                </Grid>
+            </Border>
+        </DataTemplate>
+    </Page.Resources>
+
+    <Grid>
+        <ProgressBar VerticalAlignment="Top" IsIndeterminate="{Binding IsBusy}"
+                     Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}"
+                     Foreground="#FF334B" Canvas.ZIndex="99" />
+
+        <Pivot x:Name="RankPivot" Margin="12,6,12,0" Background="Transparent">
+            <Pivot.Title>
+                <StackPanel Margin="4,0,0,0">
+                    <TextBlock Text="{Binding GameTitle}" FontSize="11" Foreground="#FF4D64" FontWeight="SemiBold" />
+                    <TextBlock Text="指挥官贡献榜" FontSize="26" FontWeight="Light" Foreground="White" Margin="0,2,0,0" />
+                </StackPanel>
+            </Pivot.Title>
+
+            <PivotItem Header="周榜">
+                <ListView ItemsSource="{Binding Weekly}" SelectionMode="None"
+                          ItemTemplate="{StaticResource RankRowTemplate}" Margin="0,8,0,0" />
+            </PivotItem>
+            <PivotItem Header="月榜">
+                <ListView ItemsSource="{Binding Monthly}" SelectionMode="None"
+                          ItemTemplate="{StaticResource RankRowTemplate}" Margin="0,8,0,0" />
+            </PivotItem>
+            <PivotItem Header="总榜">
+                <ListView ItemsSource="{Binding Total}" SelectionMode="None"
+                          ItemTemplate="{StaticResource RankRowTemplate}" Margin="0,8,0,0" />
+            </PivotItem>
+        </Pivot>
+    </Grid>
+</Page>

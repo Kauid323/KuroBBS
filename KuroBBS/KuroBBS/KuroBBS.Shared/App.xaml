@@ -35,6 +35,8 @@
         <helpers:BoolToTagBorderBrushConverter x:Key="BoolToTagBorderBrush" />
         <helpers:InverseBooleanToVisibilityConverter x:Key="InvertedBoolToVisConverter" />
         <helpers:InverseBooleanToVisibilityConverter x:Key="BoolToCollapseConverter" />
+        <helpers:StringNotEmptyToVisibilityConverter x:Key="StringNotEmptyToVis" />
+        <helpers:CommentHighlightConverter x:Key="CommentHighlightConverter" />
 
         <!-- Global Metro Modern Brushes -->
         <SolidColorBrush x:Key="MetroAccentBrush" Color="#00A3FF" />

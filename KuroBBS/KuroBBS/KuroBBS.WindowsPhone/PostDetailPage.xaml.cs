@@ -155,6 +155,9 @@ namespace KuroBBS
 
             await ViewModel.LoadPostDetailAndCommentsAsync();
 
+            // 从消息中心（评论/回复/通知）跳转时，定位并高亮到目标评论
+            await LocateTargetCommentAsync(post);
+
             UpdateQualityFlyout();
 
             // Pre-load HLS video stream in background (AutoPlay=False) so it's armed instantly on first tap
@@ -1301,6 +1304,65 @@ namespace KuroBBS
                     });
                 }
             }
+        }
+
+        /// <summary>
+        /// 从消息中心跳转时，定位并高亮到 TargetCommentId 对应的评论楼层。
+        /// 若目标评论不在已加载列表里，会先翻几页评论再尝试；未找到则静默放弃。
+        /// </summary>
+        private async Task LocateTargetCommentAsync(PostItem post)
+        {
+            if (post == null || string.IsNullOrEmpty(post.TargetCommentId)) return;
+            if (ViewModel == null || ViewModel.Comments == null || CommentsListView == null) return;
+
+            PostCommentItem target = FindCommentById(post.TargetCommentId);
+            int attempts = 0;
+            while (target == null && attempts < 4 && ViewModel.HasMoreComments && !ViewModel.IsLoadingComments)
+            {
+                await ViewModel.LoadMoreCommentsAsync();
+                target = FindCommentById(post.TargetCommentId);
+                attempts++;
+            }
+            if (target == null) return;
+
+            // 先切到「评论」分页，确保 CommentsListView 已加载到可视树
+            if (MainPivot != null)
+            {
+                foreach (var it in MainPivot.Items)
+                {
+                    var pi = it as PivotItem;
+                    if (pi != null && object.Equals(pi.Header, "评论"))
+                    {
+                        MainPivot.SelectedItem = pi;
+                        break;
+                    }
+                }
+            }
+
+            // 高亮 + 滚入视野
+            target.IsHighlighted = true;
+            CommentsListView.ScrollIntoView(target);
+
+            // 数秒后自动取消高亮
+            var tgt = target;
+            var ignore = Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Low, async () =>
+            {
+                await System.Threading.Tasks.Task.Delay(3000);
+                tgt.IsHighlighted = false;
+            });
+        }
+
+        private PostCommentItem FindCommentById(string id)
+        {
+            if (ViewModel == null || ViewModel.Comments == null) return null;
+            foreach (var c in ViewModel.Comments)
+            {
+                if (c != null && string.Equals(c.CommentId, id))
+                {
+                    return c;
+                }
+            }
+            return null;
         }
 
         private static T FindVisualChild<T>(DependencyObject parent) where T : DependencyObject

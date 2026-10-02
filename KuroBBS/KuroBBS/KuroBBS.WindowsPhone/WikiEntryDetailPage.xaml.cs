@@ -91,7 +91,21 @@ namespace KuroBBS
                 _wikiType = newWikiType;
                 _entryId = newEntryId;
                 await ViewModel.LoadDetailAsync(_wikiType, _entryId);
+
+                // 首次布局完成后采一次内存：崩溃日志显示死点正是「模块加进 ItemsControl 之后、
+                // 第一次完整布局/实现阶段」（解析已完成 → 无托管异常 → exit code 1）。
+                // 有了这一行，下一次日志就能直接看出「是这一页自己吃掉了内存」还是
+                // 「进入本页前进程就已经接近上限」。
+                this.LayoutUpdated -= OnWikiLayoutProbe;
+                this.LayoutUpdated += OnWikiLayoutProbe;
             }
+        }
+
+        /// <summary>一次性探针：首次布局完成后记录一次进程内存占用，随后立即摘除。</summary>
+        private void OnWikiLayoutProbe(object sender, object e)
+        {
+            this.LayoutUpdated -= OnWikiLayoutProbe;
+            KuroLogger.Mem("wiki.layout");
         }
 
         private void OnBackClick(object sender, RoutedEventArgs e)

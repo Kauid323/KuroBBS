@@ -356,25 +356,15 @@ namespace KuroBBS
                                 var tr = new Run { Text = run.Text ?? "" };
                                 if (run.IsBold) tr.FontWeight = FontWeights.Bold;
                                 if (run.IsItalic) tr.FontStyle = FontStyle.Italic;
-                                if (!string.IsNullOrEmpty(run.ColorHex))
-                                {
-                                    try
-                                    {
-                                        string hex = run.ColorHex.Trim('#');
-                                        if (hex.Length == 6)
-                                        {
-                                            byte r = Convert.ToByte(hex.Substring(0, 2), 16);
-                                            byte g = Convert.ToByte(hex.Substring(2, 2), 16);
-                                            byte b = Convert.ToByte(hex.Substring(4, 2), 16);
-                                            tr.Foreground = new SolidColorBrush(Color.FromArgb(255, r, g, b));
-                                        }
-                                    }
-                                    catch { }
-                                }
-                                else
-                                {
-                                    tr.Foreground = new SolidColorBrush(Colors.White);
-                                }
+                                // 与正文渲染共用同一套颜色适配（KuroHtmlPostParser.ParseColor）：
+                                // ① 支持 rgb(...) / #RGB / #RRGGBB 各种写法（旧代码只认 6 位 hex）；
+                                // ② 太暗的颜色（如 #000000）在深色主题上不可读，统一退回白色，
+                                //    保证「预览所见 == 发布后正文所见」。
+                                Windows.UI.Color? previewColor = string.IsNullOrEmpty(run.ColorHex)
+                                    ? (Windows.UI.Color?)null
+                                    : KuroHtmlPostParser.ParseColor(run.ColorHex);
+                                tr.Foreground = new SolidColorBrush(
+                                    previewColor.HasValue ? previewColor.Value : Colors.White);
                                 paragraph.Inlines.Add(tr);
                             }
                         }

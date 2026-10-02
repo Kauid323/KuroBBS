@@ -26,6 +26,14 @@ namespace KuroBBS.Models
         public string IpRegion { get; set; }
         public bool IsOfficial { get; set; }
         public bool IsFollow { get; set; }
+        public List<string> IdentityNames { get; set; }
+        public bool HasIdentityNames { get { return IdentityNames != null && IdentityNames.Count > 0; } }
+        public string IdentityText { get { return HasIdentityNames ? string.Join("、", IdentityNames) : ""; } }
+
+        public PostAuthor()
+        {
+            IdentityNames = new List<string>();
+        }
     }
 
     public class PostImage
@@ -114,6 +122,22 @@ namespace KuroBBS.Models
         public bool IsStrikethrough { get; set; }
         public string ColorHex { get; set; }
         public double? FontSize { get; set; }
+
+        /// <summary>
+        /// 是否为「正文里插入的图片块」。评论/回复的 commentContent / replyContent 里，
+        /// 图片块形如 {"contentType":2,"imgWidth":1080,"imgHeight":2046,"url":"…"}——
+        /// 它既没有 children 也没有 content，只按文本解析会**整块丢失**（评论图片不显示）。
+        /// </summary>
+        public bool IsImage { get; set; }
+
+        /// <summary>图片地址（IsImage 为 true 时有效）。</summary>
+        public string ImageUrl { get; set; }
+
+        /// <summary>原图宽度（可能为 0，为 0 时按正方形占位）。</summary>
+        public int ImageWidth { get; set; }
+
+        /// <summary>原图高度（可能为 0，为 0 时按正方形占位）。</summary>
+        public int ImageHeight { get; set; }
     }
 
     public class PostContentBlock
@@ -140,6 +164,8 @@ namespace KuroBBS.Models
     public class PostItem : INotifyPropertyChanged
     {
         public string PostId { get; set; }
+        /// <summary>从消息中心跳转时，定位并高亮到该评论（postCommentId）。</summary>
+        public string TargetCommentId { get; set; }
         public int GameId { get; set; }
         public int ForumId { get; set; }
         public int PostType { get; set; }
@@ -366,6 +392,14 @@ namespace KuroBBS.Models
         {
             get { return _isLoadingReplies; }
             set { _isLoadingReplies = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>从消息中心跳转定位评论时的高亮标记（定位后自动复位）。</summary>
+        private bool _isHighlighted;
+        public bool IsHighlighted
+        {
+            get { return _isHighlighted; }
+            set { _isHighlighted = value; OnPropertyChanged(); }
         }
 
         /// <summary>
@@ -864,6 +898,20 @@ namespace KuroBBS.Models
         public string StatsText { get { return string.Format("粉丝 {0} · 动态 {1}", FansCount, PostCount); } }
         public bool MutualFollow { get; set; }
 
+        private bool _isSelected;
+        public bool IsSelected
+        {
+            get { return _isSelected; }
+            set
+            {
+                if (_isSelected != value)
+                {
+                    _isSelected = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
         private bool _isFollow;
         public bool IsFollow
         {
@@ -1138,6 +1186,195 @@ namespace KuroBBS.Models
         public string RankDisplay
         {
             get { return "TOP " + (Sort + 1); }
+        }
+        /// <summary>名次（1 起）。</summary>
+        public int RankNumber { get { return Sort + 1; } }
+        public string RankNumberText { get { return (Sort + 1).ToString(); } }
+        public bool IsTopThree { get { return Sort >= 0 && Sort < 3; } }
+    }
+
+    /// <summary>
+    /// Wiki 主页「特色玩法 / 研发池 / 热门活动」卡片。
+    ///
+    /// 统一承载两类 sideModules 数据：
+    ///   events-side       —— 特色玩法/研发卡池/诺曼复兴战/幻痛囚笼/历战映射（取 active tab）
+    ///   hot-content-side  —— 热门活动（content 是数组，一项一张卡）
+    /// </summary>
+    public class WikiEventCard
+    {
+        public string Title { get; set; }
+        /// <summary>分区名（events-side 的 tab 名，如「高级区」）。</summary>
+        public string Subtitle { get; set; }
+        public string Description { get; set; }
+        public string ImageUrl { get; set; }
+        public int CatalogueId { get; set; }
+        public string EntryId { get; set; }
+        public string LinkUrl { get; set; }
+        public int LinkType { get; set; }
+        public WikiCountdownInfo Countdown { get; set; }
+
+        public bool HasCountdown { get { return Countdown != null && Countdown.HasRange; } }
+        public bool HasSubtitle { get { return !string.IsNullOrWhiteSpace(Subtitle); } }
+        public bool HasDescription { get { return !string.IsNullOrWhiteSpace(Description); } }
+        public bool HasImage { get { return !string.IsNullOrWhiteSpace(ImageUrl); } }
+    }
+
+    /// <summary>
+    /// Wiki 主页「热门资讯」分组（mainModules 里 type=multilist 的一项）。
+    /// 一个分组 = 一个标题（角色攻略 / 版本攻略 / 同人资讯 / 新闻公告）+ 若干词条入口。
+    /// </summary>
+    public class WikiNewsGroup
+    {
+        public string Title { get; set; }
+        public string ImageUrl { get; set; }
+        public List<WikiShortcutItem> Items { get; set; }
+
+        public WikiNewsGroup()
+        {
+            Items = new List<WikiShortcutItem>();
+        }
+    }
+
+    /// <summary>
+    /// Wiki 主页倒计时 / 进度条信息（对应接口的 countDown 字段）。
+    ///
+    /// 【字段语义 —— 已逐字核对官方前端 JS（inner-ad28e500.js 的编辑器选项）】
+    ///   type            = "no-repeat" | "repeat"
+    ///   dateRange       = [开始, 结束]（no-repeat 时使用）
+    ///   repeat.isNeverEnd       = 是否永不结束（周期性常驻活动）
+    ///   repeat.repeatInterval   = 重复间隔（天）
+    ///   repeat.dataRanges[].dataRange = [开始, 结束]（repeat 时按阶段分段）
+    ///   repeat.dataRanges[].title     = 该阶段文案（如「进行中」，可自定义）
+    ///   repeat.dataRanges[].progressType:
+    ///       1 = 进行中   （显示进度条）
+    ///       2 = 已结束   （显示红色进度条）
+    ///       3 = 无进度条 （只显示倒计时，不显示进度条）
+    /// </summary>
+    public class WikiCountdownInfo : INotifyPropertyChanged
+    {
+        public const int ProgressInProgress = 1;
+        public const int ProgressEnded = 2;
+        public const int ProgressNone = 3;
+
+        public const int StatusNotStart = 0;
+        public const int StatusRunning = 1;
+        public const int StatusEnded = 2;
+
+        public string Type { get; set; }
+        public string Precision { get; set; }
+        /// <summary>阶段文案（repeat.dataRanges[].title），可为空。</summary>
+        public string Label { get; set; }
+        /// <summary>进度条类型：1=进行中 2=已结束 3=无进度条。</summary>
+        public int ProgressType { get; set; }
+        public bool HasRange { get; set; }
+        public DateTime Start { get; set; }
+        public DateTime End { get; set; }
+
+        private int _status = StatusEnded;
+        public int Status { get { return _status; } }
+
+        public event PropertyChangedEventHandler PropertyChanged;
+
+        private void Raise(string name)
+        {
+            var h = PropertyChanged;
+            if (h != null) h(this, new PropertyChangedEventArgs(name));
+        }
+
+        /// <summary>按当前时间重算状态，并通知界面刷新（供定时器周期调用）。</summary>
+        public void Refresh()
+        {
+            if (!HasRange)
+            {
+                _status = StatusEnded;
+            }
+            else
+            {
+                DateTime now = DateTime.Now;
+                if (now < Start) _status = StatusNotStart;
+                else if (now > End) _status = StatusEnded;
+                else _status = StatusRunning;
+            }
+
+            Raise("Status");
+            Raise("StatusText");
+            Raise("LabelText");
+            Raise("RemainingText");
+            Raise("ShowRemaining");
+            Raise("ProgressPercent");
+            Raise("ShowProgress");
+            Raise("IsEnded");
+        }
+
+        /// <summary>状态文案：未开始 / 进行中 / 已结束。</summary>
+        public string StatusText
+        {
+            get
+            {
+                switch (_status)
+                {
+                    case StatusNotStart: return "未开始";
+                    case StatusRunning: return "进行中";
+                    default: return "已结束";
+                }
+            }
+        }
+
+        /// <summary>展示用文案：优先用接口给的阶段文案，否则回退状态文案。</summary>
+        public string LabelText
+        {
+            get { return string.IsNullOrWhiteSpace(Label) ? StatusText : Label; }
+        }
+
+        /// <summary>是否展示剩余时间文字。</summary>
+        public bool ShowRemaining { get { return HasRange && _status != StatusEnded; } }
+
+        public string RemainingText
+        {
+            get
+            {
+                if (!HasRange) return "";
+                DateTime now = DateTime.Now;
+                if (_status == StatusNotStart) return "距开始 " + FormatSpan(Start - now);
+                if (_status == StatusRunning) return "还剩 " + FormatSpan(End - now);
+                return "已结束";
+            }
+        }
+
+        /// <summary>是否展示进度条（progressType == 3 表示官方明确要求不显示）。</summary>
+        public bool ShowProgress { get { return HasRange && ProgressType != ProgressNone; } }
+
+        /// <summary>0~100 的进度百分比。</summary>
+        public double ProgressPercent
+        {
+            get
+            {
+                if (!HasRange) return 0;
+                double total = (End - Start).TotalSeconds;
+                if (total <= 0) return 0;
+                double done = (DateTime.Now - Start).TotalSeconds;
+                double p = done / total * 100.0;
+                if (p < 0) p = 0;
+                if (p > 100) p = 100;
+                return p;
+            }
+        }
+
+        /// <summary>进度条是否应显示为「已结束」红色。</summary>
+        public bool IsEnded { get { return _status == StatusEnded || ProgressType == ProgressEnded; } }
+
+        private static string FormatSpan(TimeSpan ts)
+        {
+            if (ts < TimeSpan.Zero) ts = TimeSpan.Zero;
+            if (ts.TotalDays >= 1)
+            {
+                return ((int)ts.TotalDays) + "天" + ts.Hours + "小时";
+            }
+            if (ts.TotalHours >= 1)
+            {
+                return ((int)ts.TotalHours) + "小时" + ts.Minutes + "分";
+            }
+            return ts.Minutes + "分";
         }
     }
 
@@ -2107,6 +2344,21 @@ namespace KuroBBS.Models
         public List<WikiShortcutItem> SideModules { get; set; }
         public List<WikiContributorItem> Contributors { get; set; }
 
+        /// <summary>特色玩法 / 研发卡池 / 常驻玩法（sideModules 里 type=events-side）。</summary>
+        public List<WikiEventCard> FeaturedCards { get; set; }
+        /// <summary>热门活动（sideModules 里 type=hot-content-side）。</summary>
+        public List<WikiEventCard> HotActivities { get; set; }
+        /// <summary>热门话题（sideModules 里 type=quick-entry）。</summary>
+        public List<WikiShortcutItem> HotTopics { get; set; }
+        /// <summary>未归类/未渲染的 sideModules（如 guide-qrcode），作兜底入口。</summary>
+        public List<WikiShortcutItem> OtherModules { get; set; }
+        /// <summary>指挥官贡献榜入口模块（type=contributor-side），可能为 null。</summary>
+        public WikiShortcutItem ContributorModule { get; set; }
+        /// <summary>纷争战区（mainModules 里 type=hot-content-main），带剩余时间 + 进度条。</summary>
+        public List<WikiEventCard> ZoneCards { get; set; }
+        /// <summary>热门资讯（mainModules 里 type=multilist）。</summary>
+        public List<WikiNewsGroup> NewsGroups { get; set; }
+
         public WikiHomepageData()
         {
             Banners = new List<WikiBannerItem>();
@@ -2115,6 +2367,12 @@ namespace KuroBBS.Models
             MainModules = new List<WikiShortcutItem>();
             SideModules = new List<WikiShortcutItem>();
             Contributors = new List<WikiContributorItem>();
+            FeaturedCards = new List<WikiEventCard>();
+            HotActivities = new List<WikiEventCard>();
+            HotTopics = new List<WikiShortcutItem>();
+            OtherModules = new List<WikiShortcutItem>();
+            ZoneCards = new List<WikiEventCard>();
+            NewsGroups = new List<WikiNewsGroup>();
         }
     }
 

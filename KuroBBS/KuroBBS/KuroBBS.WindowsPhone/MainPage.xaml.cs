@@ -188,6 +188,7 @@ namespace KuroBBS
             else
             {
                 await ViewModel.RefreshUserProfileIfLoggedInAsync();
+                await ViewModel.LoadMessageUnreadAsync();
             }
         }
 
@@ -238,6 +239,40 @@ namespace KuroBBS
                         break;
                     }
                 }
+            }
+        }
+
+        private async void OnMainPivotSelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            var item = MainPivot != null ? MainPivot.SelectedItem as PivotItem : null;
+            if (item != null && object.Equals(item.Header, "关注") && ViewModel != null)
+            {
+                await ViewModel.EnsureFollowingFeedLoadedAsync();
+            }
+            else if (item != null && item == MessagePivotItem && ViewModel != null)
+            {
+                // 进入消息 tab：刷新未读红点（列表/各子 tab 由 MessageHubControl 自行懒加载）
+                await ViewModel.LoadMessageUnreadAsync();
+            }
+        }
+
+        private async void OnFollowingAllTapped(object sender, TappedRoutedEventArgs e)
+        {
+            if (ViewModel != null)
+            {
+                await ViewModel.SelectAllFollowingAsync();
+                e.Handled = true;
+            }
+        }
+
+        private async void OnFollowingUserTapped(object sender, TappedRoutedEventArgs e)
+        {
+            var element = sender as FrameworkElement;
+            var user = element != null ? element.Tag as UserFollowItem : null;
+            if (ViewModel != null && user != null)
+            {
+                await ViewModel.SelectFollowingUserAsync(user);
+                e.Handled = true;
             }
         }
 
@@ -462,6 +497,25 @@ namespace KuroBBS
             }
         }
 
+        private async void OnFollowingListLoaded(object sender, RoutedEventArgs e)
+        {
+            var lv = sender as ListView;
+            if (lv == null) return;
+
+            for (int i = 0; i < 10; i++)
+            {
+                var sv = FindScrollViewer(lv);
+                if (sv != null)
+                {
+                    sv.ViewChanged -= FollowingScrollViewer_ViewChanged;
+                    sv.ViewChanged += FollowingScrollViewer_ViewChanged;
+                    KuroBBS.Services.KuroLogger.Loading("SCROLL_HOOK", "Following ListView ScrollViewer hooked for infinite scroll");
+                    break;
+                }
+                await System.Threading.Tasks.Task.Delay(100);
+            }
+        }
+
         private bool _isUpdatingCommandBar = false;
 
         private void CommunityScrollViewer_ViewChanged(object sender, ScrollViewerViewChangedEventArgs e)
@@ -491,6 +545,22 @@ namespace KuroBBS
                 if (ViewModel != null)
                 {
                     var t = ViewModel.LoadMoreNewsAsync();
+                }
+            }
+
+            HandleCommandBarScrollMode(sv.VerticalOffset);
+        }
+
+        private void FollowingScrollViewer_ViewChanged(object sender, ScrollViewerViewChangedEventArgs e)
+        {
+            var sv = sender as ScrollViewer;
+            if (sv == null) return;
+
+            if (sv.ScrollableHeight > 0 && (sv.VerticalOffset >= sv.ScrollableHeight - 400 || (sv.VerticalOffset / sv.ScrollableHeight >= 0.75)))
+            {
+                if (ViewModel != null)
+                {
+                    var t = ViewModel.LoadMoreFollowingAsync();
                 }
             }
 

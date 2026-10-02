@@ -38,6 +38,37 @@ namespace KuroBBS.ViewModels
         public ObservableCollection<WikiContributorItem> Contributors { get; private set; }
         public ObservableCollection<WikiSearchItem> SearchResults { get; private set; }
 
+        /// <summary>特色玩法 / 研发卡池 / 常驻玩法（带剩余时间 + 进度条）。</summary>
+        public ObservableCollection<WikiEventCard> FeaturedCards { get; private set; }
+        /// <summary>热门活动（带剩余时间 + 进度条）。</summary>
+        public ObservableCollection<WikiEventCard> HotActivities { get; private set; }
+        /// <summary>热门话题（话题标签）。</summary>
+        public ObservableCollection<WikiShortcutItem> HotTopics { get; private set; }
+        /// <summary>未归类的 sideModules 兜底入口。</summary>
+        public ObservableCollection<WikiShortcutItem> OtherModules { get; private set; }
+        /// <summary>纷争战区（带剩余时间 + 进度条）。</summary>
+        public ObservableCollection<WikiEventCard> ZoneCards { get; private set; }
+        /// <summary>热门资讯（分组 + 词条）。</summary>
+        public ObservableCollection<WikiNewsGroup> NewsGroups { get; private set; }
+
+        /// <summary>指挥官贡献榜入口标题（接口未给则用默认文案）。</summary>
+        public string ContributorTitle
+        {
+            get { return _contributorTitle; }
+        }
+        private string _contributorTitle = "指挥官贡献榜";
+
+        /// <summary>指挥官贡献榜入口图标（接口未给则空）。</summary>
+        public string ContributorIconUrl
+        {
+            get { return _contributorIconUrl; }
+        }
+        private string _contributorIconUrl = "";
+
+        // 倒计时刷新定时器（首页卡片上的「剩余时间 / 进度条」需要随时间推进）
+        private Windows.UI.Xaml.DispatcherTimer _countdownTimer;
+        private readonly System.Collections.Generic.List<WikiCountdownInfo> _activeCountdowns = new System.Collections.Generic.List<WikiCountdownInfo>();
+
         private string _searchQuery = "";
         public string SearchQuery
         {
@@ -68,6 +99,39 @@ namespace KuroBBS.ViewModels
             SideModules = new ObservableCollection<WikiShortcutItem>();
             Contributors = new ObservableCollection<WikiContributorItem>();
             SearchResults = new ObservableCollection<WikiSearchItem>();
+            FeaturedCards = new ObservableCollection<WikiEventCard>();
+            HotActivities = new ObservableCollection<WikiEventCard>();
+            HotTopics = new ObservableCollection<WikiShortcutItem>();
+            OtherModules = new ObservableCollection<WikiShortcutItem>();
+            ZoneCards = new ObservableCollection<WikiEventCard>();
+            NewsGroups = new ObservableCollection<WikiNewsGroup>();
+        }
+
+        /// <summary>启动倒计时刷新（30 秒一次），让首页卡片的剩余时间/进度条随时间推进。</summary>
+        public void StartCountdownTimer()
+        {
+            if (_countdownTimer == null)
+            {
+                _countdownTimer = new Windows.UI.Xaml.DispatcherTimer();
+                _countdownTimer.Interval = TimeSpan.FromSeconds(30);
+                _countdownTimer.Tick += CountdownTimer_Tick;
+            }
+            _countdownTimer.Start();
+        }
+
+        /// <summary>停止倒计时刷新（离开页面时调用，避免无谓的后台唤醒）。</summary>
+        public void StopCountdownTimer()
+        {
+            if (_countdownTimer != null) _countdownTimer.Stop();
+        }
+
+        private void CountdownTimer_Tick(object sender, object e)
+        {
+            for (int i = 0; i < _activeCountdowns.Count; i++)
+            {
+                try { _activeCountdowns[i].Refresh(); }
+                catch { }
+            }
         }
 
         public async Task LoadHomepageAsync(int wikiType, bool forceRefresh = false)
@@ -94,8 +158,38 @@ namespace KuroBBS.ViewModels
                     SideModules.Clear();
                     foreach (var sm in data.SideModules) SideModules.Add(sm);
 
+                    FeaturedCards.Clear();
+                    foreach (var fc in data.FeaturedCards) FeaturedCards.Add(fc);
+
+                    HotActivities.Clear();
+                    foreach (var ha in data.HotActivities) HotActivities.Add(ha);
+
+                    HotTopics.Clear();
+                    foreach (var ht in data.HotTopics) HotTopics.Add(ht);
+
+                    OtherModules.Clear();
+                    foreach (var om in data.OtherModules) OtherModules.Add(om);
+
+                    ZoneCards.Clear();
+                    foreach (var zc in data.ZoneCards) ZoneCards.Add(zc);
+
+                    NewsGroups.Clear();
+                    foreach (var ng in data.NewsGroups) NewsGroups.Add(ng);
+
                     Contributors.Clear();
                     foreach (var c in data.Contributors) Contributors.Add(c);
+
+                    // 贡献榜入口：接口给了就用接口标题/图标，否则用默认文案。
+                    if (data.ContributorModule != null && !string.IsNullOrWhiteSpace(data.ContributorModule.Title))
+                    {
+                        _contributorTitle = data.ContributorModule.Title;
+                        _contributorIconUrl = data.ContributorModule.IconUrl;
+                    }
+                    OnPropertyChanged("ContributorTitle");
+                    OnPropertyChanged("ContributorIconUrl");
+
+                    CollectActiveCountdowns();
+                    StartCountdownTimer();
 
                     HasLoaded = true;
                 }
@@ -108,6 +202,24 @@ namespace KuroBBS.ViewModels
             finally
             {
                 IsBusy = false;
+            }
+        }
+
+        /// <summary>收集所有带有效区间的倒计时，供定时器统一刷新。</summary>
+        private void CollectActiveCountdowns()
+        {
+            _activeCountdowns.Clear();
+            foreach (var c in FeaturedCards)
+            {
+                if (c != null && c.Countdown != null && c.Countdown.HasRange) _activeCountdowns.Add(c.Countdown);
+            }
+            foreach (var c in HotActivities)
+            {
+                if (c != null && c.Countdown != null && c.Countdown.HasRange) _activeCountdowns.Add(c.Countdown);
+            }
+            foreach (var c in ZoneCards)
+            {
+                if (c != null && c.Countdown != null && c.Countdown.HasRange) _activeCountdowns.Add(c.Countdown);
             }
         }
 

@@ -335,6 +335,46 @@ namespace KuroBBS.Helpers
             throw new NotImplementedException();
         }
     }
+
+    /// <summary>非空字符串 -> Visible，否则 Collapsed（用于未读角标等）。</summary>
+    public class StringNotEmptyToVisibilityConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, string language)
+        {
+            var s = value as string;
+            return !string.IsNullOrEmpty(s) ? Windows.UI.Xaml.Visibility.Visible : Windows.UI.Xaml.Visibility.Collapsed;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, string language)
+        {
+            throw new NotImplementedException();
+        }
+    }
+
+    /// <summary>
+    /// 评论定位高亮：IsHighlighted=true 时返回高亮底色，否则返回常规卡片底色。
+    /// 用于从消息中心跳转后，滚动并高亮到目标评论。
+    /// </summary>
+    public class CommentHighlightConverter : IValueConverter
+    {
+        // 亮金色高亮（显眼但不刺眼）
+        private static readonly Windows.UI.Xaml.Media.SolidColorBrush HighlightBrush =
+            new Windows.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 90, 72, 12));
+        // 常规卡片底色
+        private static readonly Windows.UI.Xaml.Media.SolidColorBrush NormalBrush =
+            new Windows.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 22, 22, 28));
+
+        public object Convert(object value, Type targetType, object parameter, string language)
+        {
+            if (value is bool && (bool)value) return HighlightBrush;
+            return NormalBrush;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, string language)
+        {
+            throw new NotImplementedException();
+        }
+    }
 }
 
 

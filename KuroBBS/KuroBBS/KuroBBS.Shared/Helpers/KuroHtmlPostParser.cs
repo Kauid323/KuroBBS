@@ -26,6 +26,19 @@ namespace KuroBBS.Helpers
         private static readonly Regex BlockChildRegex = new Regex(@"<(p|div|h[1-6]|blockquote)(\s|>)", RegexOptions.IgnoreCase | RegexOptions.Singleline);
 
         /// <summary>
+        /// 「标签之间的空白」：`&gt;` 与 `&lt;` 之间的换行 + 缩进。
+        ///
+        /// HTML 语义上这段空白是**无意义**的（浏览器会折叠掉），但旧代码把它原样交给
+        /// `AddTextRuns` → 每个换行都变成一次 `LineBreak`。
+        /// 真实案例（【锈夜逐光】疾雷手册，content 是一整张 &lt;table&gt;）：
+        /// 正文只有 ~727 个可见字符，却产出 `runs=274`，其中约 240 个是「标签间缩进换行」
+        /// 生成的**空行** —— 页面被撑到 ~4800px 几乎全是空白，而这些空行每一个都是
+        /// 原生 text layout 对象（WP8.1 上白烧内存）。
+        /// 去掉它等价于浏览器的空白折叠，只保留 `&lt;br&gt;` 与闭合块级标签产生的真实换行。
+        /// </summary>
+        private static readonly Regex InterTagWhitespaceRegex = new Regex(@">\s+<", RegexOptions.Singleline);
+
+        /// <summary>
         /// Word / 旧版编辑器粘贴产生的「条件注释」。
         /// 形态：
         ///   &lt;!--[if gte vml 1]&gt; ... &lt;![endif]--&gt;   （带内容的整段）
@@ -251,6 +264,10 @@ namespace KuroBBS.Helpers
 
             html = StripComments(html);
             if (string.IsNullOrEmpty(html)) return runs;
+
+            // 折叠「标签之间的空白/换行」（HTML 里本就无意义），否则每个缩进换行都会变成一次
+            // LineBreak，把正文排成一堆空行（见 InterTagWhitespaceRegex 注释里的真实案例）。
+            html = InterTagWhitespaceRegex.Replace(html, "><");
 
             bool bold = isHeading;
             bool italic = false;
@@ -505,7 +522,38 @@ namespace KuroBBS.Helpers
             return false;
         }
 
+        /// <summary>
+        /// 解析正文里显式指定的文字颜色，并做**深色主题适配**。
+        ///
+        /// 真实抓包里，正文 HTML 经常带
+        ///   &lt;span style="color: rgb(0, 0, 0);"&gt;…&lt;/span&gt;
+        /// 这类**黑色 / 近黑色**：既有网页/Word 复制粘贴带来的默认黑，
+        /// 也有“为浅色表格单元格背景配的深色字”（例：#34495E / #5B544A / #666666）。
+        /// 本 App 是深色主题，照搬这些颜色就会出现「正文黑字看都看不见」。
+        ///
+        /// 判据：只对「最亮通道 &lt; 110」的颜色返回 null —— 调用方
+        /// （InlineRunsHelper / PostDetailPage）遇到 null 就不设 Foreground，
+        /// 文字自动继承宿主 RichTextBlock 的浅色前景，等于**专门把黑字适配成主题文字色**。
+        ///
+        /// 为什么用「最亮通道」而不是逐通道 &lt;30：像 #333333 / #666666 / #34495E
+        /// 这类近黑、深灰、暗板岩也属于“看不见”的范畴，必须一起兜住；
+        /// 而红 rgb(224, 62, 45)、绿、蓝、金、橙等**彩色文字**至少有一个通道 ≥110，
+        /// 一律原样返回，做到「不影响其他颜色的文字」。
+        /// </summary>
         public static Windows.UI.Color? ParseColor(string colorStr)
+        {
+            var c = ParseColorRaw(colorStr);
+            if (!c.HasValue) return null;
+
+            // 太暗 → 在深色主题上不可读 → 退回主题文字色（不设 Foreground）
+            int maxChannel = Math.Max(c.Value.R, Math.Max(c.Value.G, c.Value.B));
+            if (maxChannel < 110) return null;
+
+            return c;
+        }
+
+        /// <summary>纯粹的色值解析（不含主题适配），供 ParseColor 调用。</summary>
+        private static Windows.UI.Color? ParseColorRaw(string colorStr)
         {
             if (string.IsNullOrWhiteSpace(colorStr)) return null;
             string c = colorStr.Trim(' ', ';', '"', '\'');
@@ -543,9 +591,6 @@ namespace KuroBBS.Helpers
                                 }
                             }
 
-                            // Protect against pure black on dark theme
-                            if (r < 30 && g < 30 && b < 30) return null;
-
                             return Windows.UI.Color.FromArgb(a, r, g, b);
                         }
                     }
@@ -569,9 +614,6 @@ namespace KuroBBS.Helpers
                         byte g = (byte)((val >> 8) & 0xFF);
                         byte b = (byte)(val & 0xFF);
 
-                        // Protect against pure black on dark theme
-                        if (r < 30 && g < 30 && b < 30) return null;
-
                         return Windows.UI.Color.FromArgb(255, r, g, b);
                     }
                 }
@@ -584,9 +626,6 @@ namespace KuroBBS.Helpers
                         byte r = (byte)((val >> 16) & 0xFF);
                         byte g = (byte)((val >> 8) & 0xFF);
                         byte b = (byte)(val & 0xFF);
-
-                        int brightness = (int)(0.299 * r + 0.587 * g + 0.114 * b);
-                        if (brightness < 60) return null;
 
                         return Windows.UI.Color.FromArgb(a, r, g, b);
                     }

@@ -294,7 +294,7 @@
                             </ListView.Footer>
                             <ListView.ItemTemplate>
                                 <DataTemplate>
-                                    <Border Background="{StaticResource MetroCardBackgroundBrush}" Padding="12" BorderBrush="#26262E" BorderThickness="1">
+                                    <Border Background="{Binding IsHighlighted, Converter={StaticResource CommentHighlightConverter}}" Padding="12" BorderBrush="#26262E" BorderThickness="1">
                                         <Grid>
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="Auto" />

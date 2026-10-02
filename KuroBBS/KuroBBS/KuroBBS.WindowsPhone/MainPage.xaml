@@ -41,7 +41,7 @@
         <ProgressBar VerticalAlignment="Top" IsIndeterminate="{Binding IsBusy}" Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}" Foreground="{StaticResource MetroAccentBrush}" Canvas.ZIndex="999" />
 
         <!-- Pure Native Windows Phone 8.1 Metro Pivot -->
-        <Pivot x:Name="MainPivot" Title="{Binding SelectedGameName}">
+        <Pivot x:Name="MainPivot" Title="{Binding SelectedGameName}" SelectionChanged="OnMainPivotSelectionChanged">
             <Pivot.TitleTemplate>
                 <DataTemplate>
                     <TextBlock Text="{Binding}" FontSize="11" Foreground="{StaticResource MetroSubTextBrush}" Margin="0,0,0,0" />
@@ -214,7 +214,157 @@
                 </Grid>
             </PivotItem>
 
-            <!-- Tab 2: 官方 (Official Events: 活动 / 公告 / 资讯) -->
+            <!-- Tab 2: 关注动态 and followed accounts -->
+            <PivotItem Header="关注" Margin="0">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <StackPanel Grid.Row="0" Margin="0,2,0,8">
+                        <TextBlock Text="关注的人" FontSize="12" Foreground="{StaticResource MetroSubTextBrush}" Margin="4,0,0,4" />
+                        <ScrollViewer HorizontalScrollMode="Enabled" HorizontalScrollBarVisibility="Auto"
+                                      VerticalScrollMode="Disabled" VerticalScrollBarVisibility="Disabled" Height="82">
+                            <StackPanel Orientation="Horizontal">
+                                <Border Width="76" Height="72" Margin="2,0,6,0" Padding="6"
+                                        Background="#282832" BorderBrush="{Binding IsAllFollowingSelected, Converter={StaticResource BoolToActiveBrush}}"
+                                        BorderThickness="1" Tapped="OnFollowingAllTapped">
+                                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                        <TextBlock Text="全部" FontSize="14" FontWeight="SemiBold" Foreground="White" HorizontalAlignment="Center" />
+                                        <TextBlock Text="关注动态" FontSize="10" Foreground="{StaticResource MetroSubTextBrush}" HorizontalAlignment="Center" Margin="0,2,0,0" />
+                                    </StackPanel>
+                                </Border>
+                                <ItemsControl ItemsSource="{Binding FollowingUsers}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <StackPanel Orientation="Horizontal" />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Width="82" Height="72" Margin="0,0,6,0" Padding="5"
+                                                    Background="#282832" BorderBrush="{Binding IsSelected, Converter={StaticResource BoolToActiveBrush}}"
+                                                    BorderThickness="1" Tag="{Binding}" Tapped="OnFollowingUserTapped">
+                                                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                    <Border Width="34" Height="34" Background="#1E1E28" HorizontalAlignment="Center">
+                                                        <Grid>
+                                                            <TextBlock Text="👤" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource MetroSubTextBrush}" />
+                                                            <Ellipse Width="34" Height="34">
+                                                                <Ellipse.Fill>
+                                                                    <ImageBrush ImageSource="{Binding AvatarUrl, Converter={StaticResource ImageCacheConverter}, ConverterParameter=96}" Stretch="UniformToFill" />
+                                                                </Ellipse.Fill>
+                                                            </Ellipse>
+                                                        </Grid>
+                                                    </Border>
+                                                    <TextBlock Text="{Binding UserName}" FontSize="10" Foreground="White" HorizontalAlignment="Center"
+                                                               TextTrimming="CharacterEllipsis" MaxLines="1" Margin="0,3,0,0" />
+                                                    <TextBlock Text="{Binding IdentifyText}" Visibility="{Binding HasIdentityNames, Converter={StaticResource BoolToVis}}"
+                                                               FontSize="8" Foreground="{StaticResource MetroAccentBrush}" HorizontalAlignment="Center"
+                                                               TextTrimming="CharacterEllipsis" MaxLines="1" />
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </StackPanel>
+
+                    <Grid Grid.Row="1">
+                        <ListView x:Name="FollowingListView" ItemsSource="{Binding FollowingPosts}" SelectionMode="None"
+                                  IsItemClickEnabled="True" ItemClick="OnPostItemClick" Loaded="OnFollowingListLoaded">
+                            <ListView.ItemContainerStyle>
+                                <Style TargetType="ListViewItem">
+                                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                    <Setter Property="Margin" Value="0,0,0,10" />
+                                    <Setter Property="Padding" Value="0" />
+                                </Style>
+                            </ListView.ItemContainerStyle>
+                            <ListView.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="{StaticResource MetroCardBackgroundBrush}" Padding="14" BorderBrush="#2C2C34" BorderThickness="1">
+                                        <StackPanel>
+                                            <Grid Margin="0,0,0,8">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <Border Grid.Column="0" Width="36" Height="36" Margin="0,0,10,0" Background="#282832"
+                                                        Tapped="OnAuthorTapped" Tag="{Binding Author}">
+                                                    <Grid>
+                                                        <TextBlock Text="K" HorizontalAlignment="Center" VerticalAlignment="Center" FontWeight="Bold" Foreground="#8E8E93" />
+                                                        <Ellipse Width="36" Height="36">
+                                                            <Ellipse.Fill>
+                                                                <ImageBrush ImageSource="{Binding Author.AvatarUrl, Converter={StaticResource ImageCacheConverter}, ConverterParameter=96}" Stretch="UniformToFill" />
+                                                            </Ellipse.Fill>
+                                                        </Ellipse>
+                                                    </Grid>
+                                                </Border>
+                                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Tapped="OnAuthorTapped" Tag="{Binding Author}">
+                                                    <TextBlock Text="{Binding Author.UserName}" FontWeight="SemiBold" FontSize="14" Foreground="White" />
+                                                    <TextBlock Text="{Binding Author.IdentityText}" Visibility="{Binding Author.HasIdentityNames, Converter={StaticResource BoolToVis}}"
+                                                               FontSize="10" Foreground="{StaticResource MetroAccentBrush}" MaxLines="1" TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Text="{Binding PostTimeStr}" FontSize="11" Foreground="{StaticResource MetroSubTextBrush}" />
+                                                </StackPanel>
+                                                <Border Grid.Column="2" Background="#282832" Padding="6,2" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding GameName}" FontSize="10" Foreground="{StaticResource MetroAccentBrush}" />
+                                                </Border>
+                                            </Grid>
+                                            <TextBlock Text="{Binding Title}" FontSize="15" FontWeight="Bold" Foreground="White" Margin="0,0,0,4"
+                                                       TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Text="{Binding ContentSummary}" FontSize="13" Foreground="#C8C8CE" Margin="0,0,0,8"
+                                                       TextWrapping="Wrap" MaxLines="3" TextTrimming="CharacterEllipsis" LineHeight="18" />
+                                            <Border Visibility="{Binding HasCover, Converter={StaticResource BoolToVis}}" MaxHeight="180" Margin="0,0,0,8" Background="#16161E">
+                                                <Grid>
+                                                    <Border Background="#22222C" Height="140">
+                                                        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,20">
+                                                            <ProgressBar IsIndeterminate="True" Width="130" Foreground="{StaticResource MetroAccentBrush}" Opacity="0.75" Margin="0,0,0,8" />
+                                                            <TextBlock Text="正在载入图片..." FontSize="10" Foreground="{StaticResource MetroSubTextBrush}" HorizontalAlignment="Center" Opacity="0.6" />
+                                                        </StackPanel>
+                                                    </Border>
+                                                    <Image Source="{Binding CoverUrl, Converter={StaticResource ImageCacheConverter}, ConverterParameter=640}" Stretch="UniformToFill" />
+                                                </Grid>
+                                            </Border>
+                                            <Grid Margin="0,4,0,0">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="{Binding Author.IpRegion}" FontSize="11" Foreground="{StaticResource MetroSubTextBrush}" VerticalAlignment="Center" />
+                                                <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="0,0,16,0" VerticalAlignment="Center">
+                                                    <TextBlock Text="♥ " Foreground="{StaticResource MetroAccentBrush}" FontSize="12" />
+                                                    <TextBlock Text="{Binding LikeCount}" FontSize="12" Foreground="{StaticResource MetroSubTextBrush}" />
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <TextBlock Text="💬 " Foreground="{StaticResource MetroAccentBrush}" FontSize="12" />
+                                                    <TextBlock Text="{Binding CommentCount}" FontSize="12" Foreground="{StaticResource MetroSubTextBrush}" />
+                                                </StackPanel>
+                                            </Grid>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                            <ListView.Footer>
+                                <Grid Margin="0,12,0,24" Visibility="{Binding IsFollowingLoading, Converter={StaticResource BoolToVis}}">
+                                    <StackPanel HorizontalAlignment="Center" Orientation="Horizontal">
+                                        <ProgressRing IsActive="True" Width="20" Height="20" Foreground="{StaticResource MetroAccentBrush}" Margin="0,0,8,0" />
+                                        <TextBlock Text="正在加载关注动态..." FontSize="12" Foreground="{StaticResource MetroSubTextBrush}" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Grid>
+                            </ListView.Footer>
+                        </ListView>
+                        <Border Visibility="{Binding ShouldShowFollowingEmpty, Converter={StaticResource BoolToVis}}" IsHitTestVisible="False">
+                            <TextBlock Text="{Binding FollowingEmptyMessage}" FontSize="13" Foreground="{StaticResource MetroSubTextBrush}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap" Margin="24" />
+                        </Border>
+                    </Grid>
+                </Grid>
+            </PivotItem>
+
+            <!-- Tab 3: 官方 (Official Events: 活动 / 公告 / 资讯) -->
             <PivotItem Header="官方" Margin="0">
                 <Grid>
                     <Grid.RowDefinitions>
@@ -781,6 +931,18 @@
 
                     </StackPanel>
                 </ScrollViewer>
+            </PivotItem>
+
+            <!-- Tab: 消息中心（5 个子 tab 在 MessageHubControl 内实现） -->
+            <!--
+                注意：该 PivotItem 原先用 <PivotItem.Header><Grid>… 的自定义 UIElement 作表头，
+                但 Pivot 级 HeaderTemplate（<TextBlock Text="{Binding}"/>）会作用到它，
+                裸 {Binding} 解析到继承下来的 DataContext(MainViewModel)，
+                导致这个标签页直接显示 "KuroBBS.ViewModels.MainViewModel"。
+                改为与其余 7 个标签页一致的字符串表头即可正常显示「消息」。
+            -->
+            <PivotItem x:Name="MessagePivotItem" Header="消息" Margin="0">
+                <local:MessageHubControl DataContext="{Binding MessageHubVm}" />
             </PivotItem>
         </Pivot>
 

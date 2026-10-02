@@ -58,7 +58,10 @@ namespace KuroBBS.Services
             };
 
             KuroLogger.Loading("SMS_REQUEST", "Requesting SMS code for mobile " + mobile);
-            var json = await KuroApiClient.Instance.PostFormAsync("/user/getSmsCodeForH5", parameters);
+            // /user/getSmsCodeForH5 is an H5-only endpoint. It MUST be called with the
+            // official H5 request headers (source=h5); with source=android the server's
+            // risk control replies data.geeTest=true and never actually sends the SMS.
+            var json = await KuroApiClient.Instance.PostFormAsync("/user/getSmsCodeForH5", parameters, null, h5: true);
 
             if (json == null)
             {
@@ -85,6 +88,8 @@ namespace KuroBBS.Services
                     }
                 }
 
+                // data.geeTest == true  => risk control demands the GT captcha and the
+                // SMS has NOT been sent yet. Only geeTest == false means it went out.
                 if (!result.NeedGeetest)
                 {
                     result.Success = true;

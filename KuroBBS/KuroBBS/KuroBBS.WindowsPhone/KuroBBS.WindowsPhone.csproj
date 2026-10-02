@@ -139,6 +139,9 @@
     <Compile Include="WikiEntryDetailPage.xaml.cs">
       <DependentUpon>WikiEntryDetailPage.xaml</DependentUpon>
     </Compile>
+    <Compile Include="WikiContributorRankPage.xaml.cs">
+      <DependentUpon>WikiContributorRankPage.xaml</DependentUpon>
+    </Compile>
     <Compile Include="GoldShopPage.xaml.cs">
       <DependentUpon>GoldShopPage.xaml</DependentUpon>
     </Compile>
@@ -147,6 +150,15 @@
     </Compile>
     <Compile Include="TaskCenterPage.xaml.cs">
       <DependentUpon>TaskCenterPage.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="MessageHubControl.xaml.cs">
+      <DependentUpon>MessageHubControl.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="NoticeListPage.xaml.cs">
+      <DependentUpon>NoticeListPage.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="ReplyListPage.xaml.cs">
+      <DependentUpon>ReplyListPage.xaml</DependentUpon>
     </Compile>
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="KuroSoftKeyboardHelper.cs" />
@@ -237,6 +249,10 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
+    <Page Include="WikiContributorRankPage.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
     <Page Include="GoldShopPage.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
@@ -246,6 +262,18 @@
       <SubType>Designer</SubType>
     </Page>
     <Page Include="TaskCenterPage.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="MessageHubControl.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="NoticeListPage.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="ReplyListPage.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>

@@ -201,5 +201,29 @@ namespace KuroBBS.Services
             string details = ex != null ? ex.ToString() : null;
             Instance.Log(LogLevel.Error, category, message, details);
         }
+
+        /// <summary>
+        /// 记录一次「当前进程内存占用」，用于定位 WP8.1 的 OOM 死点。
+        ///
+        /// 背景：Wiki 条目详情页会「解析完整跑完 → 在 XAML 实现阶段无托管异常地 exit code 1」，
+        /// 这正是 WP8.1 内存上限被杀的特征。光靠 `MEM_USAGE_INCREASED`（只在跨档时触发）
+        /// 无法看出内存是在哪一步涨起来的，因此在关键阶段主动采样一次。
+        ///
+        /// `Windows.System.MemoryManager` **只存在于 WP8.1**，Win8.1 桌面 head 没有该类型，
+        /// 所以必须条件编译；桌面 head 上此方法是空实现（不产生日志）。
+        /// </summary>
+        public static void Mem(string tag)
+        {
+#if WINDOWS_PHONE_APP
+            try
+            {
+                Trace(string.Format("MEM[{0}] usage={1} bytes level={2}",
+                    tag,
+                    Windows.System.MemoryManager.AppMemoryUsage,
+                    Windows.System.MemoryManager.AppMemoryUsageLevel));
+            }
+            catch { }
+#endif
+        }
     }
 }

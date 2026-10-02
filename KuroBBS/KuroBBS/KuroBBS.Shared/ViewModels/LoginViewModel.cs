@@ -155,8 +155,11 @@ namespace KuroBBS.ViewModels
                 }
                 else if (result.NeedGeetest)
                 {
-                    SetStatus("验证已失效，请重新完成极验", false);
-                    TriggerGeetest(result.CaptchaId);
+                    // The captcha was already solved, yet the server still reports
+                    // geeTest=true. Re-opening the captcha here would loop forever,
+                    // so surface the failure instead.
+                    KuroBBS.Services.KuroLogger.Warn("SMS_GEETEST_BLOCK", "Server still requires geetest after a valid captcha");
+                    SetStatus("风控验证未通过，短信发送失败，请稍后重试", false);
                 }
                 else SetStatus(string.IsNullOrEmpty(result.Message) ? "发送验证码失败" : result.Message, false);
             }

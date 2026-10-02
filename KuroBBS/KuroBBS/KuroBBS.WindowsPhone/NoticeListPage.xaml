@@ -1,0 +1,85 @@
+<Page
+    x:Class="KuroBBS.NoticeListPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:KuroBBS"
+    xmlns:helpers="using:KuroBBS.Helpers"
+    xmlns:models="using:KuroBBS.Models"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+
+    <Page.BottomAppBar>
+        <CommandBar x:Name="BottomBar" Background="#121216" ClosedDisplayMode="Minimal" IsOpen="False">
+            <AppBarButton Icon="Back" Label="返回" Click="OnBackClick" />
+            <AppBarButton Icon="Refresh" Label="刷新" Click="OnRefreshClick" />
+        </CommandBar>
+    </Page.BottomAppBar>
+
+    <Grid>
+        <ProgressBar VerticalAlignment="Top" IsIndeterminate="{Binding IsBusy}"
+                     Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}"
+                     Foreground="{StaticResource MetroAccentBrush}" Canvas.ZIndex="999" />
+
+        <Grid Margin="12,8,12,0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <ListView Grid.Row="0" ItemsSource="{Binding NoticeListItems}"
+                      IsItemClickEnabled="True" ItemClick="OnNoticeClick"
+                      SelectionMode="None">
+                <!-- 必须 Stretch：WinRT 的 ListViewItem 默认 HorizontalContentAlignment=Left，
+                     不拉伸行内容就只有自身宽度（全 app 其它列表都设了这条）。 -->
+                <ListView.ItemContainerStyle>
+                    <Style TargetType="ListViewItem">
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                        <Setter Property="Padding" Value="0" />
+                    </Style>
+                </ListView.ItemContainerStyle>
+                <ListView.ItemTemplate>
+                    <DataTemplate>
+                        <Grid Margin="0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="44" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <!-- 圆形头像用 ImageBrush + ImageCacheConverter（全 app 统一方案）。
+                                 不要用 KuroLazyImage.SourceUrl：该附加属性只认 Image，
+                                 挂到 ImageBrush 上是静默 no-op → 头像永远不加载。
+                                 实心底圈是占位，头像缺失/加载中时显示灰圈而不是空洞。 -->
+                            <Grid Grid.Column="0" Width="40" Height="40" VerticalAlignment="Top" Margin="0,2,0,0">
+                                <Ellipse Fill="#2A2A32" />
+                                <Ellipse>
+                                    <Ellipse.Fill>
+                                        <ImageBrush ImageSource="{Binding SendUserHeadUrl, Converter={StaticResource ImageCacheConverter}, ConverterParameter=80}" Stretch="UniformToFill" />
+                                    </Ellipse.Fill>
+                                </Ellipse>
+                            </Grid>
+                            <StackPanel Grid.Column="1" Margin="10,0,0,0">
+                                <TextBlock Text="{Binding SendUserName}" FontSize="14" FontWeight="SemiBold" Foreground="#00A3FF" />
+                                <TextBlock Text="{Binding NoticeTitle}" FontSize="13" Foreground="White" Margin="0,2,0,0" />
+                                <TextBlock Text="{Binding NoticeContent}" FontSize="12" Foreground="{StaticResource MetroSubTextBrush}" Margin="0,2,0,0" TextWrapping="Wrap" />
+                                <!-- 通知配图（picUrl，系统/活动通知的封面）：正文下方展示。
+                                     目标元素是 Image，所以用 KuroLazyImage（不能用 ImageCacheConverter 绑大图）。
+                                     等比缩放到高度上限 150，不裁切；没有配图的条目自动隐藏。 -->
+                                <Image helpers:KuroLazyImage.SourceUrl="{Binding PicUrl}"
+                                       helpers:KuroLazyImage.DecodeWidth="480"
+                                       Visibility="{Binding HasPic, Converter={StaticResource BoolToVis}}"
+                                       MaxHeight="150" HorizontalAlignment="Left" Stretch="Uniform"
+                                       Margin="0,6,0,0" />
+                                <TextBlock Text="{Binding ShowTime}" FontSize="11" Foreground="#7A7A85" Margin="0,2,0,0" />
+                            </StackPanel>
+                        </Grid>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+
+            <Button Grid.Row="1" Content="加载更多" HorizontalAlignment="Center" Margin="0,4,0,8"
+                    Visibility="{Binding NoticeListHasNext, Converter={StaticResource BoolToVis}}"
+                    Click="OnLoadMoreClick" />
+        </Grid>
+    </Grid>
+</Page>

@@ -306,6 +306,31 @@ namespace KuroBBS.Services
                     {
                         if (bVal.ValueType != JsonValueType.Object) continue;
                         var bObj = bVal.GetObject();
+
+                        // 图片块：{"contentType":2,"imgWidth":1080,"imgHeight":2046,"url":"…"}。
+                        // 它既没有 children 也没有 content，只走下面两个分支会被**整块丢掉**
+                        // → 评论/回复里的图片永远不显示。这里单独识别成图片 run。
+                        int contentType = (int)GetNumber(bObj, "contentType", 1);
+                        string imgUrl = GetString(bObj, "url", "");
+                        if (contentType == 2 && !string.IsNullOrEmpty(imgUrl))
+                        {
+                            // 平台判定为异常的图片不渲染（与 KuroForumService.AppendContentImages 口径一致）
+                            bool abnormal = bObj.ContainsKey("isAbnormal")
+                                && bObj.GetNamedValue("isAbnormal").ValueType == JsonValueType.Boolean
+                                && bObj.GetNamedBoolean("isAbnormal", false);
+                            if (!abnormal)
+                            {
+                                result.Add(new PostTextRun
+                                {
+                                    IsImage = true,
+                                    ImageUrl = imgUrl,
+                                    ImageWidth = (int)GetNumber(bObj, "imgWidth", 0),
+                                    ImageHeight = (int)GetNumber(bObj, "imgHeight", 0)
+                                });
+                            }
+                            continue;
+                        }
+
                         if (bObj.ContainsKey("children") && bObj.GetNamedValue("children").ValueType == JsonValueType.Array)
                         {
                             var runs = ParseChildrenToRuns(bObj.GetNamedArray("children"));

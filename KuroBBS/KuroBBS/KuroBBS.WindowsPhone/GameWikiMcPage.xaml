@@ -10,6 +10,36 @@
     mc:Ignorable="d"
     Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
 
+    <Page.Resources>
+        <!-- 活动 / 战区通用卡片（热门活动、纷争战区共用）：主图 + 标题 + 剩余时间 + 进度条 -->
+        <DataTemplate x:Key="EventCardTemplate">
+            <Border Background="#242430" BorderBrush="#353545" BorderThickness="1"
+                    Margin="0,0,0,8" Tapped="OnEventCardTapped" Tag="{Binding}">
+                <StackPanel>
+                    <Grid Height="132">
+                        <Image helpers:KuroLazyImage.SourceUrl="{Binding ImageUrl}"
+                               helpers:KuroLazyImage.DecodeWidth="420"
+                               Stretch="UniformToFill" />
+                        <Border VerticalAlignment="Bottom" Background="#B0000000" Padding="10,6">
+                            <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="SemiBold"
+                                       Foreground="White" TextWrapping="Wrap" />
+                        </Border>
+                    </Grid>
+                    <StackPanel Margin="10,6" Visibility="{Binding HasCountdown, Converter={StaticResource BoolToVis}}">
+                        <Grid>
+                            <TextBlock Text="{Binding Countdown.LabelText}" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource MetroAccentBrush}" />
+                            <TextBlock Text="{Binding Countdown.RemainingText}" FontSize="11"
+                                       Foreground="{StaticResource MetroSubTextBrush}" HorizontalAlignment="Right" />
+                        </Grid>
+                        <ProgressBar Maximum="100" Value="{Binding Countdown.ProgressPercent}"
+                                     Visibility="{Binding Countdown.ShowProgress, Converter={StaticResource BoolToVis}}"
+                                     Height="4" Margin="0,4,0,0" Foreground="{StaticResource MetroAccentBrush}" Background="#33333D" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+    </Page.Resources>
+
     <Page.BottomAppBar>
         <CommandBar Background="#121216" ClosedDisplayMode="Minimal" IsOpen="False">
             <AppBarButton Icon="Back" Label="返回" Click="OnBackClick" />
@@ -189,10 +219,118 @@
                         </GridView.ItemTemplate>
                     </GridView>
 
-                    <!-- Side Modules (鸣潮活动唤取, 推荐) -->
-                    <StackPanel Visibility="{Binding SideModules.Count, Converter={StaticResource NullToVis}}" Margin="0,0,0,16">
-                        <TextBlock Text="活动唤取与推荐" FontSize="16" FontWeight="SemiBold" Foreground="White" Margin="0,0,0,8" />
-                        <GridView ItemsSource="{Binding SideModules}" SelectionMode="None" IsItemClickEnabled="True" ItemClick="OnShortcutItemClick">
+                    <!-- 纷争战区（mainModules 里 type=hot-content-main，带剩余时间 + 进度条） -->
+                    <StackPanel Visibility="{Binding ZoneCards.Count, Converter={StaticResource NullToVis}}" Margin="0,0,0,16">
+                        <TextBlock Text="纷争战区" FontSize="16" FontWeight="SemiBold" Foreground="White" Margin="0,0,0,8" />
+                        <ItemsControl ItemsSource="{Binding ZoneCards}" ItemTemplate="{StaticResource EventCardTemplate}" />
+                    </StackPanel>
+
+                    <!-- 热门资讯（mainModules 里 type=multilist：分组 + 词条） -->
+                    <StackPanel Visibility="{Binding NewsGroups.Count, Converter={StaticResource NullToVis}}" Margin="0,0,0,16">
+                        <TextBlock Text="热门资讯" FontSize="16" FontWeight="SemiBold" Foreground="White" Margin="0,0,0,8" />
+                        <ItemsControl ItemsSource="{Binding NewsGroups}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Margin="0,0,0,10">
+                                        <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource MetroAccentBrush}" Margin="0,0,0,6" />
+                                        <GridView ItemsSource="{Binding Items}" SelectionMode="None" IsItemClickEnabled="True" ItemClick="OnShortcutItemClick">
+                                            <GridView.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <WrapGrid Orientation="Horizontal" MaximumRowsOrColumns="2" />
+                                                </ItemsPanelTemplate>
+                                            </GridView.ItemsPanel>
+                                            <GridView.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border Background="#242430" BorderBrush="#353545" BorderThickness="1" Padding="10,6" Margin="0,0,6,6">
+                                                        <TextBlock Text="{Binding Title}" FontSize="12" Foreground="White" TextTrimming="CharacterEllipsis" />
+                                                    </Border>
+                                                </DataTemplate>
+                                            </GridView.ItemTemplate>
+                                        </GridView>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+
+                    <!-- 特色玩法与唤取（events-side：唤取卡池 / 常驻玩法，带剩余时间 + 进度条） -->
+                    <StackPanel Visibility="{Binding FeaturedCards.Count, Converter={StaticResource NullToVis}}" Margin="0,0,0,16">
+                        <TextBlock Text="特色玩法与唤取" FontSize="16" FontWeight="SemiBold" Foreground="White" Margin="0,0,0,8" />
+                        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"
+                                      HorizontalScrollMode="Enabled" VerticalScrollMode="Disabled">
+                            <ItemsControl ItemsSource="{Binding FeaturedCards}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Orientation="Horizontal" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Width="250" Margin="0,0,10,0" Background="#242430"
+                                              Tapped="OnEventCardTapped" Tag="{Binding}">
+                                            <Border BorderBrush="#353545" BorderThickness="1">
+                                                <StackPanel>
+                                                    <Grid Height="118">
+                                                        <Image helpers:KuroLazyImage.SourceUrl="{Binding ImageUrl}"
+                                                               helpers:KuroLazyImage.DecodeWidth="360"
+                                                               Stretch="UniformToFill" />
+                                                        <Border VerticalAlignment="Bottom" Background="#B0000000" Padding="8,4">
+                                                            <StackPanel>
+                                                                <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="SemiBold"
+                                                                           Foreground="White" TextTrimming="CharacterEllipsis" />
+                                                                <TextBlock Text="{Binding Subtitle}" FontSize="11" Foreground="#C8C8D0"
+                                                                           Visibility="{Binding HasSubtitle, Converter={StaticResource BoolToVis}}"
+                                                                           TextTrimming="CharacterEllipsis" />
+                                                            </StackPanel>
+                                                        </Border>
+                                                    </Grid>
+                                                    <StackPanel Margin="8,6" Visibility="{Binding HasCountdown, Converter={StaticResource BoolToVis}}">
+                                                        <Grid>
+                                                            <TextBlock Text="{Binding Countdown.LabelText}" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource MetroAccentBrush}" />
+                                                            <TextBlock Text="{Binding Countdown.RemainingText}" FontSize="11"
+                                                                       Foreground="{StaticResource MetroSubTextBrush}" HorizontalAlignment="Right" />
+                                                        </Grid>
+                                                        <ProgressBar Maximum="100" Value="{Binding Countdown.ProgressPercent}"
+                                                                     Visibility="{Binding Countdown.ShowProgress, Converter={StaticResource BoolToVis}}"
+                                                                     Height="4" Margin="0,4,0,0" Foreground="{StaticResource MetroAccentBrush}" Background="#33333D" />
+                                                    </StackPanel>
+                                                </StackPanel>
+                                            </Border>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </StackPanel>
+
+                    <!-- 热门活动（hot-content-side，带剩余时间 + 进度条） -->
+                    <StackPanel Visibility="{Binding HotActivities.Count, Converter={StaticResource NullToVis}}" Margin="0,0,0,16">
+                        <TextBlock Text="热门活动" FontSize="16" FontWeight="SemiBold" Foreground="White" Margin="0,0,0,8" />
+                        <ItemsControl ItemsSource="{Binding HotActivities}" ItemTemplate="{StaticResource EventCardTemplate}" />
+                    </StackPanel>
+
+                    <!-- 热门话题（quick-entry） -->
+                    <StackPanel Visibility="{Binding HotTopics.Count, Converter={StaticResource NullToVis}}" Margin="0,0,0,16">
+                        <TextBlock Text="热门话题" FontSize="16" FontWeight="SemiBold" Foreground="White" Margin="0,0,0,8" />
+                        <GridView ItemsSource="{Binding HotTopics}" SelectionMode="None" IsItemClickEnabled="True" ItemClick="OnShortcutItemClick">
+                            <GridView.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapGrid Orientation="Horizontal" MaximumRowsOrColumns="3" />
+                                </ItemsPanelTemplate>
+                            </GridView.ItemsPanel>
+                            <GridView.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="#242430" BorderBrush="#353545" BorderThickness="1" Padding="12,7" Margin="0,0,6,6">
+                                        <TextBlock Text="{Binding Title}" FontSize="12" Foreground="White" />
+                                    </Border>
+                                </DataTemplate>
+                            </GridView.ItemTemplate>
+                        </GridView>
+                    </StackPanel>
+
+                    <!-- 其他入口（未归类的 sideModules 兜底） -->
+                    <StackPanel Visibility="{Binding OtherModules.Count, Converter={StaticResource NullToVis}}" Margin="0,0,0,16">
+                        <GridView ItemsSource="{Binding OtherModules}" SelectionMode="None" IsItemClickEnabled="True" ItemClick="OnShortcutItemClick">
                             <GridView.ItemsPanel>
                                 <ItemsPanelTemplate>
                                     <WrapGrid Orientation="Horizontal" MaximumRowsOrColumns="2" />
@@ -219,10 +357,30 @@
                         </GridView>
                     </StackPanel>
 
-                    <!-- Contributors Ranking (贡献榜) -->
-                    <StackPanel Visibility="{Binding Contributors.Count, Converter={StaticResource NullToVis}}" Margin="0,0,0,16">
-                        <TextBlock Text="贡献榜 TOP 10" FontSize="16" FontWeight="SemiBold" Foreground="White" Margin="0,0,0,8" />
-                        <ItemsControl ItemsSource="{Binding Contributors}">
+                    <!-- 贡献榜入口（点击进入 周榜 / 月榜 / 总榜） -->
+                    <StackPanel Margin="0,0,0,16">
+                        <Border Background="#1A1A22" BorderBrush="#2C2C36" BorderThickness="1"
+                                Padding="12,10" Tapped="OnContributorHeaderTapped">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Border Width="34" Height="34" Background="#141418" Margin="0,0,10,0" VerticalAlignment="Center"
+                                        Visibility="{Binding ContributorIconUrl, Converter={StaticResource StringNotEmptyToVis}}">
+                                    <Image Source="{Binding ContributorIconUrl, Converter={StaticResource ImageCache}, ConverterParameter=72}" Stretch="UniformToFill" />
+                                </Border>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding ContributorTitle}" FontSize="15" FontWeight="SemiBold" Foreground="White" />
+                                    <TextBlock Text="周榜 / 月榜 / 总榜" FontSize="11" Foreground="{StaticResource MetroSubTextBrush}" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <TextBlock Grid.Column="2" Text="查看完整榜单 ›" FontSize="12" Foreground="{StaticResource MetroAccentBrush}" VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
+
+                        <!-- 榜单一瞥：TOP 10（默认周榜） -->
+                        <ItemsControl ItemsSource="{Binding Contributors}" Margin="0,8,0,0">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
                                     <Border Margin="0,0,0,4" Background="#1A1A22" Padding="8,6">
@@ -235,7 +393,7 @@
                                             </Grid.ColumnDefinitions>
                                             <TextBlock Text="{Binding RankDisplay}" FontSize="12" FontWeight="Bold" Foreground="{StaticResource MetroGoldBrush}" VerticalAlignment="Center" Width="48" />
                                             <Border Grid.Column="1" Width="30" Height="30" Background="#141418" Margin="0,0,8,0">
-                                                <Image Source="{Binding UserHeadUrl, Converter={StaticResource ImageCache}}" Stretch="UniformToFill" />
+                                                <Image Source="{Binding UserHeadUrl, Converter={StaticResource ImageCache}, ConverterParameter=72}" Stretch="UniformToFill" />
                                             </Border>
                                             <TextBlock Grid.Column="2" Text="{Binding UserName}" FontSize="13" Foreground="White" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                                             <TextBlock Grid.Column="3" Text="{Binding Score}" FontSize="12" Foreground="{StaticResource MetroSubTextBrush}" VerticalAlignment="Center" />

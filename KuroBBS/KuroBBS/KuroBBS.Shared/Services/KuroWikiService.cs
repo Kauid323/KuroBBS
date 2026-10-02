@@ -24,17 +24,82 @@ namespace KuroBBS.Services
             }
         }
 
+        // ================= 缓存（全部**有界**，防止长时间浏览 Wiki 时内存无限增长） =================
+        //
+        // 【WP8.1 OOM 教训 —— 真实日志】
+        //   解析完整跑完 → `WIKI_DETAIL_MODULES_ADDED` / `WIKI_DETAIL_DONE` →
+        //   `MEM_USAGE_INCREASED usage=175960064 bytes level=Medium` → 无托管异常，exit code 1。
+        // 死点在「XAML 实现阶段」，是 WP8.1 内存上限被杀。
+        //
+        // 主因之一：`_entryDetailCache` / `_cataloguePageCache` 以前是**无界 Dictionary**。
+        // 每打开一个 Wiki 条目，整棵解析树（modules / components / tabs + 全部 `Content`
+        // 原始 HTML 字符串 + `Runs` / `Sections` / `Blocks` 小对象）就**永久**留在内存里：
+        // 单条「萌新入门指南页」≈ 160KB HTML + 3400 个 PostTextRun + 折叠树，约 1~2MB；
+        // 浏览几十个条目就是几十上百 MB，再叠上解码位图缓存，正好把进程顶到上限。
+        //
+        // 现在统一改成「有界 LRU」：只保留最近访问的 N 条，超出的最旧条目**直接丢弃**
+        // （下次要用时重新请求即可）。这样缓存不再随浏览时长单调增长。
+        private const int MaxEntryDetailCache = 4;
+        private const int MaxCataloguePageCache = 12;
+
         private readonly Dictionary<int, WikiHomepageData> _homepageCache = new Dictionary<int, WikiHomepageData>();
         private readonly Dictionary<int, WikiCatalogueNode> _treeCache = new Dictionary<int, WikiCatalogueNode>();
         private readonly Dictionary<string, Tuple<List<WikiItemRecord>, List<WikiTagNode>, string>> _cataloguePageCache = new Dictionary<string, Tuple<List<WikiItemRecord>, List<WikiTagNode>, string>>();
+        private readonly LinkedList<string> _cataloguePageLru = new LinkedList<string>();
         private readonly Dictionary<string, WikiEntryDetail> _entryDetailCache = new Dictionary<string, WikiEntryDetail>();
+        private readonly LinkedList<string> _entryDetailLru = new LinkedList<string>();
 
         public void ClearCache()
         {
             _homepageCache.Clear();
             _treeCache.Clear();
             _cataloguePageCache.Clear();
+            _cataloguePageLru.Clear();
             _entryDetailCache.Clear();
+            _entryDetailLru.Clear();
+        }
+
+        /// <summary>写入条目详情缓存，并按 LRU 上限裁剪（超出的最旧条目直接丢弃）。</summary>
+        private void PutEntryDetailCache(string cacheKey, WikiEntryDetail detail)
+        {
+            if (_entryDetailCache.ContainsKey(cacheKey)) _entryDetailLru.Remove(cacheKey);
+            _entryDetailLru.AddFirst(cacheKey);
+            _entryDetailCache[cacheKey] = detail;
+
+            while (_entryDetailLru.Count > MaxEntryDetailCache && _entryDetailLru.Count > 0)
+            {
+                string oldest = _entryDetailLru.Last.Value;
+                _entryDetailLru.RemoveLast();
+                _entryDetailCache.Remove(oldest);
+                KuroLogger.Trace("WIKI_CACHE_EVICT entry=" + oldest);
+            }
+        }
+
+        /// <summary>命中条目详情缓存时把它挪到 LRU 头部。</summary>
+        private bool TryGetEntryDetailCache(string cacheKey, out WikiEntryDetail detail)
+        {
+            if (_entryDetailCache.TryGetValue(cacheKey, out detail))
+            {
+                _entryDetailLru.Remove(cacheKey);
+                _entryDetailLru.AddFirst(cacheKey);
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>写入图鉴/列表页缓存，并按 LRU 上限裁剪。</summary>
+        private void PutCataloguePageCache(string cacheKey, Tuple<List<WikiItemRecord>, List<WikiTagNode>, string> value)
+        {
+            if (_cataloguePageCache.ContainsKey(cacheKey)) _cataloguePageLru.Remove(cacheKey);
+            _cataloguePageLru.AddFirst(cacheKey);
+            _cataloguePageCache[cacheKey] = value;
+
+            while (_cataloguePageLru.Count > MaxCataloguePageCache && _cataloguePageLru.Count > 0)
+            {
+                string oldest = _cataloguePageLru.Last.Value;
+                _cataloguePageLru.RemoveLast();
+                _cataloguePageCache.Remove(oldest);
+            }
         }
 
         private Dictionary<string, string> BuildWikiHeaders(int wikiType)
@@ -116,6 +181,11 @@ namespace KuroBBS.Services
                                 {
                                     bItem.Title = bItem.Describe;
                                 }
+
+                                // 官方前端只展示「当前时间落在 dateRange 内」的 banner
+                                // （home JS：banner.filter(x => moment().isBetween(x.dateRange[0], x.dateRange[1]))）。
+                                // 抓包里挂着好几张 2025 年的过期图，不过滤会一直在轮播里出现。
+                                if (!IsInDateRange(bObj, "dateRange")) continue;
 
                                 data.Banners.Add(bItem);
                             }
@@ -201,6 +271,24 @@ namespace KuroBBS.Services
                             {
                                 if (mVal.ValueType != JsonValueType.Object) continue;
                                 var mObj = mVal.GetObject();
+
+                                // mainModules 里混着三种 type：
+                                //   catalogue         —— 图鉴 / 游戏攻略 / 剧情回顾 / 主题影音（→ 核心模块 tile）
+                                //   hot-content-main  —— 纷争战区（与 hot-content-side 同构，带 countDown）
+                                //   multilist         —— 热门资讯（分组 + 词条）
+                                // 后两种官方是「内容区」而不是小图标格，所以单独渲染，不再塞进核心模块。
+                                string mType = GetString(mObj, "type", "");
+                                if (mType == "hot-content-main")
+                                {
+                                    ParseHotContent(mObj, data.ZoneCards);
+                                    continue;
+                                }
+                                if (mType == "multilist")
+                                {
+                                    ParseMultilist(mObj, data.NewsGroups);
+                                    continue;
+                                }
+
                                 string icon = GetString(mObj, "iconUrl", "");
                                 if (string.IsNullOrEmpty(icon)) icon = GetString(mObj, "contentUrl", "");
                                 if (string.IsNullOrEmpty(icon)) icon = GetString(mObj, "mobileImgUrl", "");
@@ -255,7 +343,13 @@ namespace KuroBBS.Services
                             }
                         }
 
-                        // 5. Side Modules (侧边模块: 研发池/卡池, 战区/副本, 贡献榜等)
+                        // 5. Side Modules (侧边模块: 特色玩法/研发卡池/热门活动/热门话题/贡献榜…)
+                        //
+                        // 【为什么不能一刀切成 WikiShortcutItem】
+                        // 官方首页这一栏是「实打实有内容」的：events-side 带 tabs + countDown
+                        // （剩余时间/进度条），hot-content-side 是一串活动卡，quick-entry 是话题标签，
+                        // contributor-side 是贡献榜入口。之前把它们全部压成「图标 + 标题」的小格子，
+                        // 所以看起来「没整」。现在按 type 分别解析成带倒计时/进度的卡片。
                         if (contentObj.ContainsKey("sideModules") && contentObj.GetNamedValue("sideModules").ValueType == JsonValueType.Array)
                         {
                             var smArr = contentObj.GetNamedArray("sideModules");
@@ -263,15 +357,17 @@ namespace KuroBBS.Services
                             {
                                 if (sVal.ValueType != JsonValueType.Object) continue;
                                 var sObj = sVal.GetObject();
+                                string type = GetString(sObj, "type", "");
+                                string title = GetString(sObj, "title", "");
                                 string icon = GetString(sObj, "iconUrl", "");
                                 if (string.IsNullOrEmpty(icon)) icon = GetString(sObj, "contentUrl", "");
                                 if (string.IsNullOrEmpty(icon)) icon = GetString(sObj, "mobileImgUrl", "");
 
                                 var sItem = new WikiShortcutItem
                                 {
-                                    Title = GetString(sObj, "title", ""),
+                                    Title = title,
                                     IconUrl = icon,
-                                    IconGlyph = GetShortcutGlyph(GetString(sObj, "title", ""))
+                                    IconGlyph = GetShortcutGlyph(title)
                                 };
 
                                 if (sObj.ContainsKey("more") && sObj.GetNamedValue("more").ValueType == JsonValueType.Object)
@@ -279,15 +375,41 @@ namespace KuroBBS.Services
                                     var moreObj = sObj.GetNamedObject("more");
                                     if (moreObj.ContainsKey("linkConfig") && moreObj.GetNamedValue("linkConfig").ValueType == JsonValueType.Object)
                                     {
-                                        var lc = moreObj.GetNamedObject("linkConfig");
-                                        sItem.CatalogueId = (int)GetNumber(lc, "catalogueId", 0);
-                                        sItem.EntryId = GetString(lc, "entryId", "");
-                                        sItem.LinkUrl = GetString(lc, "linkUrl", "");
-                                        sItem.LinkType = (int)GetNumber(lc, "linkType", 0);
+                                        ApplyShortcutLink(sItem, moreObj.GetNamedObject("linkConfig"));
                                     }
                                 }
 
                                 data.SideModules.Add(sItem);
+
+                                switch (type)
+                                {
+                                    case "events-side":
+                                        {
+                                            var card = ParseEventsSideCard(sObj, title, icon);
+                                            if (card != null) data.FeaturedCards.Add(card);
+                                            break;
+                                        }
+                                    case "hot-content-side":
+                                        {
+                                            ParseHotContent(sObj, data.HotActivities);
+                                            break;
+                                        }
+                                    case "quick-entry":
+                                        {
+                                            ParseQuickEntry(sObj, data.HotTopics);
+                                            break;
+                                        }
+                                    case "contributor-side":
+                                        {
+                                            data.ContributorModule = sItem;
+                                            break;
+                                        }
+                                    default:
+                                        {
+                                            data.OtherModules.Add(sItem);
+                                            break;
+                                        }
+                                }
                             }
                         }
                     }
@@ -366,6 +488,8 @@ namespace KuroBBS.Services
             string cacheKey = string.Format("{0}_{1}_{2}_{3}", wikiType, catalogueId, page, limit);
             if (!forceRefresh && _cataloguePageCache.ContainsKey(cacheKey))
             {
+                _cataloguePageLru.Remove(cacheKey);
+                _cataloguePageLru.AddFirst(cacheKey);
                 return _cataloguePageCache[cacheKey];
             }
 
@@ -497,7 +621,7 @@ namespace KuroBBS.Services
                 var resTuple = Tuple.Create(items, tags, title);
                 if (items.Count > 0 || tags.Count > 0)
                 {
-                    _cataloguePageCache[cacheKey] = resTuple;
+                    PutCataloguePageCache(cacheKey, resTuple);
                 }
                 return resTuple;
             }
@@ -534,9 +658,14 @@ namespace KuroBBS.Services
         public async Task<WikiEntryDetail> GetEntryDetailAsync(int wikiType, string entryId, bool forceRefresh = false)
         {
             string cacheKey = string.Format("{0}_{1}", wikiType, entryId);
-            if (!forceRefresh && _entryDetailCache.ContainsKey(cacheKey))
+            if (!forceRefresh)
             {
-                return _entryDetailCache[cacheKey];
+                WikiEntryDetail cachedDetail;
+                if (TryGetEntryDetailCache(cacheKey, out cachedDetail))
+                {
+                    KuroLogger.Trace("WIKI_CACHE_HIT entry=" + cacheKey);
+                    return cachedDetail;
+                }
             }
 
                 var detail = new WikiEntryDetail { Id = entryId };
@@ -880,7 +1009,7 @@ namespace KuroBBS.Services
 
                 if (detail.Modules.Count > 0 || !string.IsNullOrEmpty(detail.Name))
                 {
-                    _entryDetailCache[cacheKey] = detail;
+                    PutEntryDetailCache(cacheKey, detail);
                 }
             }
             catch (Exception ex)
@@ -949,6 +1078,383 @@ namespace KuroBBS.Services
                 KuroLogger.Error("WIKI_SEARCH_ERR", string.Format("Error searching wiki (keyword={0}): {1}", keyword, ex.Message), ex);
             }
             return list;
+        }
+
+        // ================= SideModules 解析辅助 =================
+
+        /// <summary>把 linkConfig 的导航字段填进 WikiShortcutItem。</summary>
+        private void ApplyShortcutLink(WikiShortcutItem item, JsonObject lc)
+        {
+            if (item == null || lc == null) return;
+            item.CatalogueId = (int)GetNumber(lc, "catalogueId", 0);
+            item.EntryId = GetString(lc, "entryId", "");
+            item.LinkUrl = GetString(lc, "linkUrl", "");
+            item.LinkType = (int)GetNumber(lc, "linkType", 0);
+        }
+
+        /// <summary>把 linkConfig 的导航字段填进 WikiEventCard。</summary>
+        private void ApplyCardLink(WikiEventCard card, JsonObject lc)
+        {
+            if (card == null || lc == null) return;
+            card.CatalogueId = (int)GetNumber(lc, "catalogueId", 0);
+            card.EntryId = GetString(lc, "entryId", "");
+            card.LinkUrl = GetString(lc, "linkUrl", "");
+            card.LinkType = (int)GetNumber(lc, "linkType", 0);
+        }
+
+        /// <summary>
+        /// 解析 events-side 模块（特色玩法 / 研发卡池 / 诺曼复兴战 / 幻痛囚笼 / 历战映射）为一张卡片。
+        ///
+        /// 官方前端取 content.tabs 里 active:true 的那个 tab（没有则取第一个），
+        /// 用它的 name 作分区、imgs 里第一张有效图作主图、countDown 作剩余时间/进度条。
+        /// </summary>
+        private WikiEventCard ParseEventsSideCard(JsonObject sObj, string title, string icon)
+        {
+            if (sObj == null) return null;
+            if (!sObj.ContainsKey("content") || sObj.GetNamedValue("content").ValueType != JsonValueType.Object) return null;
+            var cObj = sObj.GetNamedObject("content");
+            if (!cObj.ContainsKey("tabs") || cObj.GetNamedValue("tabs").ValueType != JsonValueType.Array) return null;
+
+            var tabs = cObj.GetNamedArray("tabs");
+            JsonObject activeTab = null;
+            JsonObject firstTab = null;
+            foreach (var tVal in tabs)
+            {
+                if (tVal.ValueType != JsonValueType.Object) continue;
+                var tObj = tVal.GetObject();
+                if (firstTab == null) firstTab = tObj;
+                if (GetBoolean(tObj, "active", false)) { activeTab = tObj; break; }
+            }
+            var tab = activeTab != null ? activeTab : firstTab;
+            if (tab == null) return null;
+
+            var card = new WikiEventCard
+            {
+                Title = title,
+                Subtitle = GetString(tab, "name", ""),
+                Description = GetString(tab, "description", ""),
+                ImageUrl = icon
+            };
+
+            if (tab.ContainsKey("countDown") && tab.GetNamedValue("countDown").ValueType == JsonValueType.Object)
+            {
+                card.Countdown = ParseCountdown(tab.GetNamedObject("countDown"));
+            }
+
+            // 主图 + 导航：优先用 tab.imgs 里第一张有图的项（它的 linkConfig 就是跳转目标）
+            if (tab.ContainsKey("imgs") && tab.GetNamedValue("imgs").ValueType == JsonValueType.Array)
+            {
+                var imgs = tab.GetNamedArray("imgs");
+                foreach (var iVal in imgs)
+                {
+                    if (iVal.ValueType != JsonValueType.Object) continue;
+                    var iObj = iVal.GetObject();
+                    string img = GetString(iObj, "img", "");
+                    if (string.IsNullOrEmpty(img)) continue;
+
+                    card.ImageUrl = img;
+                    if (iObj.ContainsKey("linkConfig") && iObj.GetNamedValue("linkConfig").ValueType == JsonValueType.Object)
+                    {
+                        ApplyCardLink(card, iObj.GetNamedObject("linkConfig"));
+                    }
+                    break;
+                }
+            }
+
+            // 图里没给导航就回退模块级 more.linkConfig
+            if (card.CatalogueId <= 0 && string.IsNullOrEmpty(card.EntryId) && string.IsNullOrEmpty(card.LinkUrl))
+            {
+                if (sObj.ContainsKey("more") && sObj.GetNamedValue("more").ValueType == JsonValueType.Object)
+                {
+                    var moreObj = sObj.GetNamedObject("more");
+                    if (moreObj.ContainsKey("linkConfig") && moreObj.GetNamedValue("linkConfig").ValueType == JsonValueType.Object)
+                    {
+                        ApplyCardLink(card, moreObj.GetNamedObject("linkConfig"));
+                    }
+                }
+            }
+
+            return card;
+        }
+
+        /// <summary>解析 hot-content-side（热门活动）：content 是数组，一项一张活动卡。</summary>
+        private void ParseHotContent(JsonObject sObj, List<WikiEventCard> target)
+        {
+            if (sObj == null || target == null) return;
+            if (!sObj.ContainsKey("content") || sObj.GetNamedValue("content").ValueType != JsonValueType.Array) return;
+
+            var arr = sObj.GetNamedArray("content");
+            foreach (var v in arr)
+            {
+                if (v.ValueType != JsonValueType.Object) continue;
+                var o = v.GetObject();
+
+                var card = new WikiEventCard
+                {
+                    Title = GetString(o, "title", ""),
+                    ImageUrl = GetString(o, "contentUrl", "")
+                };
+
+                if (o.ContainsKey("countDown") && o.GetNamedValue("countDown").ValueType == JsonValueType.Object)
+                {
+                    card.Countdown = ParseCountdown(o.GetNamedObject("countDown"));
+                }
+                if (o.ContainsKey("linkConfig") && o.GetNamedValue("linkConfig").ValueType == JsonValueType.Object)
+                {
+                    ApplyCardLink(card, o.GetNamedObject("linkConfig"));
+                }
+
+                target.Add(card);
+            }
+        }
+
+        /// <summary>解析 quick-entry（热门话题）：content 是数组，一项一个话题入口。</summary>
+        private void ParseQuickEntry(JsonObject sObj, List<WikiShortcutItem> target)
+        {
+            if (sObj == null || target == null) return;
+            if (!sObj.ContainsKey("content") || sObj.GetNamedValue("content").ValueType != JsonValueType.Array) return;
+
+            var arr = sObj.GetNamedArray("content");
+            foreach (var v in arr)
+            {
+                if (v.ValueType != JsonValueType.Object) continue;
+                var o = v.GetObject();
+                string t = GetString(o, "title", "");
+                if (string.IsNullOrWhiteSpace(t)) continue;
+
+                var item = new WikiShortcutItem
+                {
+                    Title = t,
+                    IconUrl = GetString(o, "contentUrl", ""),
+                    IconGlyph = GetShortcutGlyph(t)
+                };
+                if (o.ContainsKey("linkConfig") && o.GetNamedValue("linkConfig").ValueType == JsonValueType.Object)
+                {
+                    ApplyShortcutLink(item, o.GetNamedObject("linkConfig"));
+                }
+                target.Add(item);
+            }
+        }
+
+        /// <summary>
+        /// 解析 countDown（剩余时间 + 进度条）。
+        ///
+        /// no-repeat：直接用顶层 dateRange。
+        /// repeat   ：按阶段 dataRanges 取「当前所在阶段」；若都不在（配置是旧的周期样例），
+        ///            且 isNeverEnd=true，则按 repeatInterval（天，缺省用阶段长度）向前滚动到当前周期。
+        /// </summary>
+        private WikiCountdownInfo ParseCountdown(JsonObject cd)
+        {
+            if (cd == null) return null;
+
+            var info = new WikiCountdownInfo
+            {
+                Type = GetString(cd, "type", ""),
+                Precision = GetString(cd, "precision", "minute"),
+                ProgressType = WikiCountdownInfo.ProgressNone
+            };
+
+            string startRaw = "";
+            string endRaw = "";
+
+            // 1) 顶层 dateRange（no-repeat）
+            if (cd.ContainsKey("dateRange") && cd.GetNamedValue("dateRange").ValueType == JsonValueType.Array)
+            {
+                var dr = cd.GetNamedArray("dateRange");
+                if (dr.Count >= 2)
+                {
+                    startRaw = JsonScalar(dr[0]);
+                    endRaw = JsonScalar(dr[1]);
+                }
+            }
+
+            // 2) repeat 阶段
+            bool isRepeat = info.Type == "repeat";
+            if (isRepeat && cd.ContainsKey("repeat") && cd.GetNamedValue("repeat").ValueType == JsonValueType.Object)
+            {
+                var rep = cd.GetNamedObject("repeat");
+                double repeatInterval = GetNumber(rep, "repeatInterval", 0);
+                bool isNeverEnd = GetBoolean(rep, "isNeverEnd", false);
+
+                JsonObject chosen = null;
+                string chosenStart = "";
+                string chosenEnd = "";
+                DateTime now = DateTime.Now;
+
+                if (rep.ContainsKey("dataRanges") && rep.GetNamedValue("dataRanges").ValueType == JsonValueType.Array)
+                {
+                    var ranges = rep.GetNamedArray("dataRanges");
+                    JsonObject lastValid = null;
+                    string lastStart = "";
+                    string lastEnd = "";
+
+                    foreach (var rv in ranges)
+                    {
+                        if (rv.ValueType != JsonValueType.Object) continue;
+                        var ro = rv.GetObject();
+
+                        string rs = "";
+                        string re = "";
+                        if (ro.ContainsKey("dataRange") && ro.GetNamedValue("dataRange").ValueType == JsonValueType.Array)
+                        {
+                            var rr = ro.GetNamedArray("dataRange");
+                            if (rr.Count >= 2) { rs = JsonScalar(rr[0]); re = JsonScalar(rr[1]); }
+                        }
+
+                        DateTime s = ParseDateTime(rs);
+                        DateTime e = ParseDateTime(re);
+                        if (s == DateTime.MinValue || e == DateTime.MinValue || e <= s) continue;
+
+                        lastValid = ro; lastStart = rs; lastEnd = re;
+                        if (now >= s && now <= e) { chosen = ro; chosenStart = rs; chosenEnd = re; break; }
+                    }
+
+                    if (chosen == null && lastValid != null)
+                    {
+                        chosen = lastValid; chosenStart = lastStart; chosenEnd = lastEnd;
+
+                        // 周期活动的旧样例配置：向前滚动到包含「现在」的周期
+                        if (isNeverEnd)
+                        {
+                            DateTime s = ParseDateTime(chosenStart);
+                            DateTime e = ParseDateTime(chosenEnd);
+                            double cycleDays = repeatInterval > 0 ? repeatInterval : (e - s).TotalDays;
+                            if (cycleDays > 0)
+                            {
+                                int guard = 0;
+                                while (e < now && guard < 4000)
+                                {
+                                    s = s.AddDays(cycleDays);
+                                    e = e.AddDays(cycleDays);
+                                    guard++;
+                                }
+                                chosenStart = s.ToString("yyyy-MM-dd HH:mm");
+                                chosenEnd = e.ToString("yyyy-MM-dd HH:mm");
+                            }
+                        }
+                    }
+                }
+
+                if (chosen != null)
+                {
+                    startRaw = chosenStart;
+                    endRaw = chosenEnd;
+                    info.Label = GetString(chosen, "title", "");
+                    info.ProgressType = (int)GetNumber(chosen, "progressType", WikiCountdownInfo.ProgressNone);
+                }
+            }
+
+            DateTime start = ParseDateTime(startRaw);
+            DateTime end = ParseDateTime(endRaw);
+            if (start != DateTime.MinValue && end != DateTime.MinValue && end > start)
+            {
+                info.Start = start;
+                info.End = end;
+                info.HasRange = true;
+
+                // no-repeat（不重复的活动）官方编辑器**不提供** progressType —— 该字段只存在于
+                // repeat 的阶段里。所以 no-repeat 项里 repeat.dataRanges[].progressType 是早先
+                // 配成 repeat 时留下的残值，不能拿来判「无进度条」。
+                // 实测官方首页（热门活动 / 研发池 / 纷争战区）都是有进度条的 → 统一按「进行中」。
+                if (!isRepeat)
+                {
+                    info.ProgressType = WikiCountdownInfo.ProgressInProgress;
+                }
+            }
+
+            info.Refresh();
+            return info;
+        }
+
+        /// <summary>解析 multilist（热门资讯）：content 是分组数组，每组 = 标题 + list[] 词条。</summary>
+        private void ParseMultilist(JsonObject mObj, List<WikiNewsGroup> target)
+        {
+            if (mObj == null || target == null) return;
+            if (!mObj.ContainsKey("content") || mObj.GetNamedValue("content").ValueType != JsonValueType.Array) return;
+
+            var groups = mObj.GetNamedArray("content");
+            foreach (var gVal in groups)
+            {
+                if (gVal.ValueType != JsonValueType.Object) continue;
+                var gObj = gVal.GetObject();
+
+                var group = new WikiNewsGroup
+                {
+                    Title = GetString(gObj, "title", ""),
+                    ImageUrl = GetString(gObj, "contentUrl", "")
+                };
+
+                if (gObj.ContainsKey("list") && gObj.GetNamedValue("list").ValueType == JsonValueType.Array)
+                {
+                    var items = gObj.GetNamedArray("list");
+                    foreach (var iVal in items)
+                    {
+                        if (iVal.ValueType != JsonValueType.Object) continue;
+                        var iObj = iVal.GetObject();
+                        string name = GetString(iObj, "name", "");
+                        if (string.IsNullOrWhiteSpace(name)) continue;
+
+                        var item = new WikiShortcutItem
+                        {
+                            Title = name,
+                            IconGlyph = GetShortcutGlyph(name)
+                        };
+                        if (iObj.ContainsKey("linkConfig") && iObj.GetNamedValue("linkConfig").ValueType == JsonValueType.Object)
+                        {
+                            ApplyShortcutLink(item, iObj.GetNamedObject("linkConfig"));
+                        }
+                        group.Items.Add(item);
+                    }
+                }
+
+                if (group.Items.Count > 0) target.Add(group);
+            }
+        }
+
+        /// <summary>
+        /// 判断对象的 dateRange 是否包含当前时间。
+        /// 没有 dateRange / 解析失败时返回 true（宁可多显示，不要误杀）。
+        /// </summary>
+        private bool IsInDateRange(JsonObject obj, string key)
+        {
+            if (obj == null || !obj.ContainsKey(key)) return true;
+            try
+            {
+                var val = obj.GetNamedValue(key);
+                if (val.ValueType != JsonValueType.Array) return true;
+                var arr = val.GetArray();
+                if (arr.Count < 2) return true;
+
+                DateTime s = ParseDateTime(JsonScalar(arr[0]));
+                DateTime e = ParseDateTime(JsonScalar(arr[1]));
+                if (s == DateTime.MinValue || e == DateTime.MinValue) return true;
+
+                DateTime now = DateTime.Now;
+                return now >= s && now <= e;
+            }
+            catch { return true; }
+        }
+
+        /// <summary>取 IJsonValue 的标量字符串（string / number），其他返回空串。</summary>
+        private string JsonScalar(IJsonValue val)
+        {
+            if (val == null) return "";
+            try
+            {
+                if (val.ValueType == JsonValueType.String) return val.GetString();
+                if (val.ValueType == JsonValueType.Number) return val.GetNumber().ToString();
+            }
+            catch { }
+            return "";
+        }
+
+        /// <summary>解析接口时间字符串（如 "2026-09-24 11:00"），失败返回 DateTime.MinValue。</summary>
+        private DateTime ParseDateTime(string raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) return DateTime.MinValue;
+            DateTime dt;
+            if (DateTime.TryParse(raw, out dt)) return dt;
+            return DateTime.MinValue;
         }
 
         private string GetShortcutGlyph(string title)

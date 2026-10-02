@@ -19,6 +19,13 @@ namespace KuroBBS.Services
         private readonly HttpClient _httpClient;
         private readonly HttpBaseProtocolFilter _filter;
 
+        // Official H5 web client identity. The SMS endpoint (/user/getSmsCodeForH5)
+        // is an H5-only endpoint: its risk control only lets a real browser-style
+        // H5 request through (source=h5). An android-flagged request gets
+        // data.geeTest=true (blocked, NO sms) even after a valid captcha.
+        private const string H5DevCode = "IRRshhp4J6TGCFevrRor5oxpUyndA9xw";
+        private const string H5DistinctId = "1a0f361a5b786-0703208f8b3155-26011151-2073600-1a0f361a5b8e0";
+
         private bool _isGuestSessionInitialized = false;
 
         private static KuroApiClient _instance;
@@ -47,15 +54,35 @@ namespace KuroBBS.Services
             KuroLogger.Loading("HTTP_INIT", "KuroApiClient WinRT HttpClient initialized with BaseUri: " + BaseUri);
         }
 
-        private void ApplyHeaders(HttpRequestMessage request, Dictionary<string, string> customHeaders = null)
+        private void ApplyHeaders(HttpRequestMessage request, Dictionary<string, string> customHeaders = null, bool h5 = false)
         {
-            request.Headers.Add("source", "h5");
-            request.Headers.Add("version", "3.3.2");
-            request.Headers.Add("channelId", "10");
-            request.Headers.Add("lang", "zh-CN");
-            request.Headers.Add("countryCode", "CN");
-            request.Headers.Add("devCode", SettingsHelper.DevCode);
-            request.Headers.Add("distinct_id", SettingsHelper.DevCode);
+            if (h5)
+            {
+                // Exactly mirror the official H5 web client (www.kurobbs.com).
+                request.Headers.Add("source", "h5");
+                request.Headers.Add("version", "3.3.2");
+                request.Headers.Add("devCode", H5DevCode);
+                request.Headers.Add("distinct_id", H5DistinctId);
+                request.Headers.Add("Origin", "https://www.kurobbs.com");
+                request.Headers.Add("Referer", "https://www.kurobbs.com/");
+                request.Headers.Add("Accept-Language", "zh-CN,zh;q=0.9,ko;q=0.8");
+            }
+            else
+            {
+                // Headers match captured Android API requests exactly.
+                // The server returns code 102 "server external error" for notice APIs
+                // when source=h5/version=3.3.2 is used; source=android/version=3.4.0 works.
+                request.Headers.Add("source", "android");
+                request.Headers.Add("version", "3.4.0");
+                request.Headers.Add("versionCode", "30400");
+                request.Headers.Add("channelId", "2");
+                request.Headers.Add("lang", "zh-Hans");
+                request.Headers.Add("countryCode", "CN");
+                request.Headers.Add("devCode", SettingsHelper.DevCode);
+                request.Headers.Add("distinct_id", SettingsHelper.DevCode);
+                request.Headers.Add("osVersion", "30");
+                request.Headers.Add("model", "Redmi 6A");
+            }
 
             if (!string.IsNullOrEmpty(SettingsHelper.Token))
             {
@@ -106,11 +133,11 @@ namespace KuroBBS.Services
             }
         }
 
-        public async Task<JsonObject> PostFormAsync(string endpoint, Dictionary<string, string> parameters, Dictionary<string, string> customHeaders = null)
+        public async Task<JsonObject> PostFormAsync(string endpoint, Dictionary<string, string> parameters, Dictionary<string, string> customHeaders = null, bool h5 = false)
         {
             using (NetworkActivity.Begin())
             {
-                return await PostFormCoreAsync(endpoint, parameters, customHeaders);
+                return await PostFormCoreAsync(endpoint, parameters, customHeaders, h5);
             }
         }
 
@@ -176,7 +203,7 @@ namespace KuroBBS.Services
             }
         }
 
-        private async Task<JsonObject> PostFormCoreAsync(string endpoint, Dictionary<string, string> parameters, Dictionary<string, string> customHeaders = null)
+        private async Task<JsonObject> PostFormCoreAsync(string endpoint, Dictionary<string, string> parameters, Dictionary<string, string> customHeaders = null, bool h5 = false)
         {
             await EnsureGuestSessionAsync();
 
@@ -194,8 +221,15 @@ namespace KuroBBS.Services
             }
 
             var reqHeaders = new StringBuilder();
-            reqHeaders.Append("source=h5, version=3.3.2, channelId=10, lang=zh-CN, countryCode=CN");
-            reqHeaders.Append(", devCode=").Append(SettingsHelper.DevCode);
+            if (h5)
+            {
+                reqHeaders.Append("source=h5, version=3.3.2, devCode=").Append(H5DevCode);
+            }
+            else
+            {
+                reqHeaders.Append("source=android, version=3.4.0, versionCode=30400, channelId=2, lang=zh-Hans, countryCode=CN");
+                reqHeaders.Append(", devCode=").Append(SettingsHelper.DevCode);
+            }
             if (!string.IsNullOrEmpty(SettingsHelper.Token))
             {
                 reqHeaders.Append(", token=").Append(SettingsHelper.Token);
@@ -209,7 +243,7 @@ namespace KuroBBS.Services
             try
             {
                 var request = new HttpRequestMessage(HttpMethod.Post, uri);
-                ApplyHeaders(request, customHeaders);
+                ApplyHeaders(request, customHeaders, h5);
 
                 if (parameters != null && parameters.Count > 0)
                 {
@@ -281,19 +315,30 @@ namespace KuroBBS.Services
             var uri = new Uri(BaseUri, endpoint);
 
             KuroLogger.ThreadInfo("Network Dispatch", string.Format("Preparing GET {0} on Thread #{1}", endpoint, Environment.CurrentManagedThreadId));
-            KuroLogger.Network("GET", uri.ToString(), "Headers: [source=h5, version=3.3.2]");
+            KuroLogger.Network("GET", uri.ToString(), "Headers: [source=android, version=3.4.0, versionCode=30400, Content-Type=application/x-www-form-urlencoded]");
 
             try
             {
                 var request = new HttpRequestMessage(HttpMethod.Get, uri);
                 ApplyHeaders(request);
 
+                // The official Android okhttp client sends
+                //   Content-Type: application/x-www-form-urlencoded
+                // on EVERY request, GETs included. Several authenticated endpoints
+                // (e.g. /user/notice/senders) return code 102 "服务器外部错误" when that
+                // header is missing -- WinRT omits it on a bare GET. WinRT exposes
+                // Content-Type only through request.Content, so we attach an empty
+                // form, which yields the exact Content-Type + Content-Length: 0 the
+                // official client produces. Verified by curl bisection: with it -> 200,
+                // without it -> 102 (devCode / cookie / UA / ip all irrelevant).
+                request.Content = new HttpFormUrlEncodedContent(new Dictionary<string, string>());
+
                 var response = await _httpClient.SendRequestAsync(request);
                 sw.Stop();
 
                 var jsonStr = await response.Content.ReadAsStringAsync();
                 KuroLogger.Network("RESP", string.Format("{0} -> Status: {1} ({2}ms)", endpoint, (int)response.StatusCode, sw.ElapsedMilliseconds),
-                    string.Format("ContentLength: {0} bytes", jsonStr != null ? jsonStr.Length : 0));
+                    string.Format("ContentLength: {0} bytes\nResponse Body:\n{1}", jsonStr != null ? jsonStr.Length : 0, jsonStr ?? "(null)"));
 
                 response.EnsureSuccessStatusCode();
 
