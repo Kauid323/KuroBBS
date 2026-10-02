@@ -404,7 +404,6 @@
 
                                                     <!-- ===== 意识立绘 (illustration tabs + big art) ===== -->
                                                     <StackPanel Visibility="{Binding Consciousness.HasIllustrations, Converter={StaticResource BoolToVis}}" Margin="0,0,0,10">
-                                                        <TextBlock Text="意识立绘" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource MetroSubTextBrush}" Margin="0,0,0,6" />
                                                         <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Margin="0,0,0,8">
                                                             <ItemsControl ItemsSource="{Binding Consciousness.Illustrations}">
                                                                 <ItemsControl.ItemsPanel>
@@ -445,7 +444,6 @@
 
                                                     <!-- ===== 突破素材 ===== -->
                                                     <StackPanel Visibility="{Binding Consciousness.HasBreakStages, Converter={StaticResource BoolToVis}}" Margin="0,0,0,10">
-                                                        <TextBlock Text="突破素材" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource MetroSubTextBrush}" Margin="0,0,0,6" />
                                                         <ItemsControl ItemsSource="{Binding Consciousness.BreakStages}">
                                                             <ItemsControl.ItemTemplate>
                                                                 <DataTemplate>
@@ -487,7 +485,6 @@
 
                                                     <!-- ===== 意识故事 (accordion) ===== -->
                                                     <StackPanel Visibility="{Binding Consciousness.HasStories, Converter={StaticResource BoolToVis}}" Margin="0,0,0,10">
-                                                        <TextBlock Text="意识故事" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource MetroSubTextBrush}" Margin="0,0,0,6" />
                                                         <ItemsControl ItemsSource="{Binding Consciousness.Stories}">
                                                             <ItemsControl.ItemTemplate>
                                                                 <DataTemplate>
@@ -516,8 +513,6 @@
 
                                                     <!-- ===== 意识使用心得 (tip cards) ===== -->
                                                     <StackPanel Visibility="{Binding Consciousness.HasTips, Converter={StaticResource BoolToVis}}">
-                                                        <TextBlock Text="{Binding Consciousness.TipsTitle}" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource MetroSubTextBrush}" Margin="0,0,0,6"
-                                                                   Visibility="{Binding Consciousness.TipsTitle, Converter={StaticResource NullToVis}}" />
                                                         <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
                                                             <ItemsControl ItemsSource="{Binding Consciousness.Tips}">
                                                                 <ItemsControl.ItemsPanel>
@@ -855,8 +850,12 @@
                                                                     <ItemsControl ItemsSource="{Binding ActiveTabImages}" Visibility="{Binding HasActiveTabImages, Converter={StaticResource BoolToVis}}">
                                                                         <ItemsControl.ItemTemplate>
                                                                             <DataTemplate>
-                                                                                <Border Background="#101018" Margin="0,0,0,6">
-                                                                                    <Image helpers:KuroGifHelper.GifSource="{Binding}" Source="{Binding Converter={StaticResource ImageCache}}" Stretch="Uniform" MaxHeight="300" />
+                                                                                <Border Background="#101018" Margin="0,0,0,6"
+                                                                                        Tag="{Binding}" Tapped="OnWikiImageTapped">
+                                                                                    <Image helpers:KuroGifHelper.GifSource="{Binding}"
+                                                                                           helpers:KuroLazyImage.SourceUrl="{Binding}"
+                                                                                           helpers:KuroLazyImage.DecodeWidth="720"
+                                                                                           Stretch="Uniform" MaxHeight="300" />
                                                                                 </Border>
                                                                             </DataTemplate>
                                                                         </ItemsControl.ItemTemplate>
@@ -927,16 +926,25 @@
                                                 </StackPanel>
 
                                                 <!-- Single Image (if standalone image component) -->
-                                                <Border Background="#141418" Margin="0,0,0,6" Visibility="{Binding HasSingleImage, Converter={StaticResource BoolToVis}}">
-                                                    <Image helpers:KuroGifHelper.GifSource="{Binding ImageUrl}" Source="{Binding ImageUrl, Converter={StaticResource ImageCache}}" Stretch="Uniform" MaxHeight="300" />
+                                                <Border Background="#141418" Margin="0,0,0,6"
+                                                        Visibility="{Binding HasSingleImage, Converter={StaticResource BoolToVis}}"
+                                                        Tag="{Binding ImageUrl}" Tapped="OnWikiImageTapped">
+                                                    <Image helpers:KuroGifHelper.GifSource="{Binding ImageUrl}"
+                                                           helpers:KuroLazyImage.SourceUrl="{Binding ImageUrl}"
+                                                           helpers:KuroLazyImage.DecodeWidth="720"
+                                                           Stretch="Uniform" MaxHeight="300" />
                                                 </Border>
 
                                                 <!-- Image List (if not in tabs/role) -->
                                                 <ItemsControl ItemsSource="{Binding ImageList}" Visibility="{Binding HasImages, Converter={StaticResource BoolToVis}}">
                                                     <ItemsControl.ItemTemplate>
                                                         <DataTemplate>
-                                                            <Border Background="#141418" Margin="0,0,0,6">
-                                                                <Image helpers:KuroGifHelper.GifSource="{Binding}" Source="{Binding Converter={StaticResource ImageCache}}" Stretch="Uniform" MaxHeight="260" />
+                                                            <Border Background="#141418" Margin="0,0,0,6"
+                                                                    Tag="{Binding}" Tapped="OnWikiImageTapped">
+                                                                <Image helpers:KuroGifHelper.GifSource="{Binding}"
+                                                                       helpers:KuroLazyImage.SourceUrl="{Binding}"
+                                                                       helpers:KuroLazyImage.DecodeWidth="720"
+                                                                       Stretch="Uniform" MaxHeight="260" />
                                                             </Border>
                                                         </DataTemplate>
                                                     </ItemsControl.ItemTemplate>
@@ -979,5 +987,91 @@
 
             </StackPanel>
         </ScrollViewer>
+
+        <!-- Metro Fullscreen Photo Viewer Overlay（与帖子详情一致） -->
+        <Grid x:Name="ImageViewerOverlay"
+              Visibility="{Binding IsImageViewerOpen, Converter={StaticResource BoolToVis}}"
+              Background="#F8000000"
+              Canvas.ZIndex="3000">
+            <Grid.Transitions>
+                <TransitionCollection>
+                    <EntranceThemeTransition />
+                </TransitionCollection>
+            </Grid.Transitions>
+
+            <!-- ScrollViewer with pinch-to-zoom & smooth panning -->
+            <ScrollViewer x:Name="ImageViewerScrollViewer"
+                          HorizontalScrollBarVisibility="Hidden"
+                          VerticalScrollBarVisibility="Hidden"
+                          ZoomMode="Enabled"
+                          MinZoomFactor="0.5"
+                          MaxZoomFactor="5.0"
+                          DoubleTapped="OnImageViewerDoubleTapped"
+                          Tapped="OnImageViewerBackgroundTapped">
+                <Grid x:Name="ImageViewerContainer" HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <Image x:Name="ViewerImage"
+                           Source="{Binding SelectedImageUrl, Converter={StaticResource ImageCache}}"
+                           Stretch="Uniform"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           ImageOpened="OnViewerImageOpened" />
+                </Grid>
+            </ScrollViewer>
+
+            <!-- Prev / Next (multi-image) -->
+            <Button Content="&#xE26B;" FontFamily="Segoe UI Symbol" FontSize="18" Foreground="White"
+                    HorizontalAlignment="Left" VerticalAlignment="Center" Margin="8,0,0,0"
+                    Background="#66000000" BorderThickness="0" Width="44" Height="64"
+                    Click="OnViewerPrevClick"
+                    Visibility="{Binding HasMultipleViewerImages, Converter={StaticResource BoolToVis}}" />
+
+            <Button Content="&#xE26C;" FontFamily="Segoe UI Symbol" FontSize="18" Foreground="White"
+                    HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,8,0"
+                    Background="#66000000" BorderThickness="0" Width="44" Height="64"
+                    Click="OnViewerNextClick"
+                    Visibility="{Binding HasMultipleViewerImages, Converter={StaticResource BoolToVis}}" />
+
+            <!-- Top Minimal Floating Toolbar (Counter / Save / Close) -->
+            <Grid VerticalAlignment="Top" HorizontalAlignment="Stretch" Margin="12,12,12,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <TextBlock Grid.Column="0"
+                           Text="{Binding ViewerCounterText}"
+                           FontSize="14" Foreground="#CCFFFFFF" FontWeight="SemiBold"
+                           VerticalAlignment="Center" />
+
+                <Button Grid.Column="1"
+                        Click="OnSaveImageClick"
+                        Background="Transparent" BorderBrush="Transparent" BorderThickness="0"
+                        Padding="10,6" Margin="0,0,6,0" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="💾" FontSize="14" Foreground="#00A3FF" VerticalAlignment="Center" Margin="0,0,4,0" />
+                        <TextBlock Text="保存" FontSize="14" Foreground="White" FontWeight="SemiBold" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+
+                <Button Grid.Column="2"
+                        Click="OnImageViewerCloseClick"
+                        Background="Transparent" BorderBrush="Transparent" BorderThickness="0"
+                        Padding="10,6" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="✕" FontSize="14" Foreground="#FF453A" VerticalAlignment="Center" Margin="0,0,4,0" />
+                        <TextBlock Text="关闭" FontSize="14" Foreground="White" FontWeight="SemiBold" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+            </Grid>
+
+            <!-- Save Notification Toast -->
+            <Border x:Name="SaveToastBorder"
+                    Visibility="Collapsed"
+                    HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,48"
+                    Background="#E61C1C24" BorderBrush="#33FFFFFF" BorderThickness="1" Padding="18,10">
+                <TextBlock x:Name="SaveToastText" Text="已保存到相册" FontSize="13" Foreground="White" FontWeight="Medium" />
+            </Border>
+        </Grid>
     </Grid>
 </Page>

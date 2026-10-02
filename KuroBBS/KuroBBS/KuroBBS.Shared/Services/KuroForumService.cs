@@ -905,6 +905,35 @@ namespace KuroBBS.Services
             }
         }
 
+        /// <summary>
+        /// 从评论/回复的富文本块数组（commentContent / replyContent）中抽取图片块。
+        /// 图片块的契约（已验证）：{ "contentType":2, "url":"...", "imgWidth":1920, "imgHeight":1080, "isAbnormal":false }
+        /// contentType==1 为文字/表情块，不在此处理。
+        /// </summary>
+        private void AppendContentImages(JsonArray blocks, List<PostImage> target)
+        {
+            if (blocks == null || target == null) return;
+            foreach (var bVal in blocks)
+            {
+                if (bVal.ValueType != JsonValueType.Object) continue;
+                var bObj = bVal.GetObject();
+
+                int ct = (int)GetNumber(bObj, "contentType", 1);
+                string url = GetString(bObj, "url", "");
+                if (ct != 2 || string.IsNullOrEmpty(url)) continue;
+
+                bool isAbnormal = GetBoolean(bObj, "isAbnormal", false);
+                if (isAbnormal) continue; // 被平台判定为异常的图片不渲染
+
+                target.Add(new PostImage
+                {
+                    Url = url,
+                    Width = (int)GetNumber(bObj, "imgWidth", 0),
+                    Height = (int)GetNumber(bObj, "imgHeight", 0)
+                });
+            }
+        }
+
         private PostCommentItem ParseCommentItem(JsonObject obj, string postId, int gameId = 2, int forumId = 4)
         {
             try
@@ -962,6 +991,7 @@ namespace KuroBBS.Services
                             }
                         }
                         content = sb.ToString().Trim();
+                        AppendContentImages(cVal.GetArray(), comment.ImageList);
                     }
                 }
 
@@ -1010,6 +1040,7 @@ namespace KuroBBS.Services
                             }
                         }
                         content = sb.ToString().Trim();
+                        AppendContentImages(cVal.GetArray(), comment.ImageList);
                     }
                 }
 
@@ -1109,6 +1140,7 @@ namespace KuroBBS.Services
                                 }
                             }
                             rContent = sb.ToString().Trim();
+                            AppendContentImages(rBlocks, reply.ImageList);
                         }
 
                         if (string.IsNullOrEmpty(rContent) && rObj.ContainsKey("replyContentStr"))

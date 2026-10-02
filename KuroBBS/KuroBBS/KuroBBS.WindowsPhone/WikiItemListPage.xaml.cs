@@ -96,20 +96,29 @@ namespace KuroBBS
         {
             if (record == null) return;
 
+            // 1. 有 entryId 直接进条目详情。
             if (!string.IsNullOrEmpty(record.EntryId) && record.EntryId != "0")
             {
                 Frame.Navigate(typeof(WikiEntryDetailPage), string.Format("{0}|{1}", _wikiType, record.EntryId));
+                return;
             }
-            else if (!string.IsNullOrEmpty(record.LinkUrl))
+
+            // 2. 其余交给全软件统一的内链解析器
+            //    （/item/、/post/、/topic/、/user/、?fid=&sid=、站外链接一网打尽）。
+            if (!string.IsNullOrEmpty(record.LinkUrl))
             {
-                // Parse link URL
-                if (record.LinkUrl.Contains("/item/"))
+                var target = KuroBBS.Helpers.KuroLinkResolver.Resolve(record.LinkUrl, record.Title);
+                if (target.Kind == KuroBBS.Helpers.KuroLinkKind.WikiCatalogue)
                 {
-                    int itemIdx = record.LinkUrl.IndexOf("/item/");
-                    string sub = record.LinkUrl.Substring(itemIdx + 6);
-                    int qIdx = sub.IndexOf('?');
-                    string entryId = qIdx >= 0 ? sub.Substring(0, qIdx) : sub;
-                    Frame.Navigate(typeof(WikiEntryDetailPage), string.Format("{0}|{1}", _wikiType, entryId));
+                    // 图鉴列表要用当前 wikiType，避免跨游戏串台。
+                    Frame.Navigate(typeof(WikiItemListPage),
+                        string.Format("{0}|{1}|{2}", _wikiType, target.Id, target.Title));
+                    return;
+                }
+
+                if (KuroBBS.Helpers.KuroLinkNavigator.Navigate(Frame, target, _wikiType))
+                {
+                    return;
                 }
             }
         }

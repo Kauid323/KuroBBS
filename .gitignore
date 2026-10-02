@@ -12,3 +12,4 @@ kurowiki/
 *.js
 *.ps1
 __pycahce__/
+.workbuddy-ai/

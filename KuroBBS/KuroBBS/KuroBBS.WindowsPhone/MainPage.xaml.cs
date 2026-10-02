@@ -306,7 +306,25 @@ namespace KuroBBS
                 return;
             }
 
-            // 3. Native Built-in page navigations
+            // 3. 先解析 url 的「具体内链」：/item/（条目详情）、/post/（帖子）、
+            //    /catalogue/list?fid=&sid=（目录列表）等。
+            //    必须在下面那条「凡是 wiki.kurobbs.com 就进 Wiki 主页」的兜底之前判断，
+            //    否则像「版本攻略」这种 url = .../pns/item/1539291460079370240 的条目
+            //    会被误判成「进 Wiki 主页」而丢掉具体条目。
+            if (!string.IsNullOrEmpty(item.Url))
+            {
+                var target = KuroBBS.Helpers.KuroLinkResolver.Resolve(item.Url, item.WikiName);
+                if (target != null && target.IsResolved && target.Kind != KuroBBS.Helpers.KuroLinkKind.External)
+                {
+                    int wikiType = item.GameId == 3 ? 9 : 2;
+                    if (KuroBBS.Helpers.KuroLinkNavigator.Navigate(this.Frame, target, wikiType))
+                    {
+                        return;
+                    }
+                }
+            }
+
+            // 4. Native Built-in page navigations (Wiki 主页入口)
             if (item.WikiName == "WIKI" || item.WikiName.ToUpper().Contains("WIKI") || (!string.IsNullOrEmpty(item.Url) && item.Url.Contains("wiki.kurobbs.com")))
             {
                 int gameId = item.GameId > 0 ? item.GameId : (ViewModel != null ? ViewModel.SelectedGameId : 2);
@@ -346,7 +364,7 @@ namespace KuroBBS
                 return;
             }
 
-            // 4. Web URL / Tool
+            // 6. Web URL / Tool（站外链接 / 自定义 scheme，交给系统浏览器）
             string targetUrl = !string.IsNullOrEmpty(item.Url) ? item.Url : item.CustomSchemeUrl;
             if (!string.IsNullOrEmpty(targetUrl))
             {

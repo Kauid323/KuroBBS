@@ -11,6 +11,7 @@ using Windows.Storage;
 using Windows.Storage.Streams;
 using Windows.UI.Core;
 using Windows.UI.Xaml;
+using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Media.Imaging;
 using Windows.Web.Http;
 using Windows.Web.Http.Filters;
@@ -43,6 +44,15 @@ namespace KuroBBS.Services
         private int _initStarted = 0;
         private StorageFolder _cacheFolder;
         private HttpClient _httpClient;
+
+        /// <summary>
+        /// 同时进行「下载 + 解码」的并发上限。画册类条目一屏可能有 40+ 张全宽大图，
+        /// 若全部并发下载/解码会瞬间占满 UI 线程与内存，故串行化到小窗口逐步回填。
+        /// </summary>
+        private readonly SemaphoreSlim _decodeThrottle = new SemaphoreSlim(MaxConcurrentDecodes, MaxConcurrentDecodes);
+
+        /// <summary>单次解码并发上限常量。</summary>
+        private const int MaxConcurrentDecodes = 3;
 
         public KuroImageCache()
         {
@@ -156,9 +166,143 @@ namespace KuroBBS.Services
             return bitmap;
         }
 
-        private void PutInMemoryCache(string key, BitmapImage bitmap)
+        /// <summary>
+        /// 在后台线程下载并解码图片，完成后在 UI 线程把 Source 回填到 image.Source。
+        /// 这是画册 / 图集类页面的推荐用法：调用方只负责 create 一个空 Image，
+        /// 解码与网络全部脱离 UI 线程，且受 _decodeThrottle 限流。
+        /// </summary>
+        /// <param name="image">目标 Image（可为 null，此时只做预热缓存）</param>
+        /// <param name="url">图片地址</param>
+        /// <param name="decodeWidth">解码宽度上限</param>
+        public async Task LoadIntoAsync(Image image, string url, int decodeWidth = 360, int decodeHeight = 0)
         {
+            if (string.IsNullOrWhiteSpace(url)) return;
+
+            string cacheKey = string.Format("{0}_w{1}_h{2}", url, decodeWidth, decodeHeight);
+
+            // 1. 命中内存缓存：直接回填（仍在 UI 线程，但无 IO）
+            BitmapImage cached;
             lock (_lock)
+            {
+                if (_memoryCache.TryGetValue(cacheKey, out cached))
+                {
+                    _lruKeys.Remove(cacheKey);
+                    _lruKeys.AddFirst(cacheKey);
+                }
+            }
+            if (cached != null)
+            {
+                await SetSourceOnUiThreadAsync(image, cached);
+                return;
+            }
+
+            // 2. 磁盘缓存命中：从本地文件解码，快且不耗流量
+            string fileName = ComputeHash(url) + GetExtension(url);
+            bool isCachedOnDisk;
+            lock (_lock) { isCachedOnDisk = _diskFileCache.Contains(fileName); }
+
+            if (isCachedOnDisk)
+            {
+                var bmp = CreateEmptyBitmap(decodeWidth, decodeHeight);
+                try { bmp.UriSource = new Uri("ms-appdata:///local/ImageCache/" + fileName); }
+                catch { }
+                PutInMemoryCache(cacheKey, bmp);
+                await SetSourceOnUiThreadAsync(image, bmp);
+                return;
+            }
+
+            // 3. 网络：进入限流队列，后台下载，完成后回填
+            await _initTcs.Task;
+            if (_cacheFolder == null)
+            {
+                // 缓存目录不可用时降级：直接在 UI 线程挂远程 URI，保证图片仍可见
+                var fallback = CreateEmptyBitmap(decodeWidth, decodeHeight);
+                try { fallback.UriSource = new Uri(url); } catch { }
+                PutInMemoryCache(cacheKey, fallback);
+                await SetSourceOnUiThreadAsync(image, fallback);
+                return;
+            }
+
+            await _decodeThrottle.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                // 限流等待期间可能已有同图完成，二次检查避免重复下载
+                lock (_lock)
+                {
+                    if (_memoryCache.TryGetValue(cacheKey, out cached)) { }
+                }
+                if (cached != null)
+                {
+                    await SetSourceOnUiThreadAsync(image, cached);
+                    return;
+                }
+
+                var response = await _httpClient.GetAsync(new Uri(url));
+                if (!response.IsSuccessStatusCode) return;
+
+                var buffer = await response.Content.ReadAsBufferAsync();
+
+                try
+                {
+                    var file = await _cacheFolder.CreateFileAsync(fileName, CreationCollisionOption.ReplaceExisting);
+                    await FileIO.WriteBufferAsync(file, buffer);
+                    lock (_lock) { _diskFileCache.Add(fileName); }
+                }
+                catch { }
+
+                var bitmap = CreateEmptyBitmap(decodeWidth, decodeHeight);
+                try { bitmap.UriSource = new Uri("ms-appdata:///local/ImageCache/" + fileName); }
+                catch
+                {
+                    try { bitmap.UriSource = new Uri(url); } catch { }
+                }
+                PutInMemoryCache(cacheKey, bitmap);
+                await SetSourceOnUiThreadAsync(image, bitmap);
+            }
+            catch (Exception ex)
+            {
+                KuroLogger.Warn("IMG_LAZY_ERR", "Lazy image load failed: " + url + " -> " + ex.Message);
+            }
+            finally
+            {
+                _decodeThrottle.Release();
+            }
+        }
+
+        private static BitmapImage CreateEmptyBitmap(int decodeWidth, int decodeHeight)
+        {
+            var bitmap = new BitmapImage();
+            if (decodeHeight > 0)
+            {
+                bitmap.DecodePixelType = DecodePixelType.Physical;
+                bitmap.DecodePixelHeight = Math.Min(1080, decodeHeight);
+            }
+            else if (decodeWidth > 0)
+            {
+                bitmap.DecodePixelType = DecodePixelType.Physical;
+                bitmap.DecodePixelWidth = Math.Min(1080, decodeWidth);
+            }
+            return bitmap;
+        }
+
+        private static async Task SetSourceOnUiThreadAsync(Image image, BitmapImage bitmap)
+        {
+            if (image == null || bitmap == null) return;
+            var dispatcher = image.Dispatcher;
+            if (dispatcher == null) return;
+            if (dispatcher.HasThreadAccess)
+            {
+                image.Source = bitmap;
+                return;
+            }
+            await dispatcher.RunAsync(CoreDispatcherPriority.Low, () =>
+            {
+                try { image.Source = bitmap; } catch { }
+            });
+        }
+
+        private void PutInMemoryCache(string key, BitmapImage bitmap)
+        {            lock (_lock)
             {
                 if (_memoryCache.ContainsKey(key))
                 {

@@ -24,6 +24,9 @@
     <Compile Include="$(MSBuildThisFileDirectory)Helpers\NotificationHelper.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Helpers\InlineRunsHelper.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Helpers\KuroGifHelper.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Helpers\KuroLazyImage.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Helpers\KuroLinkResolver.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Helpers\KuroSoftKeyboardHelper.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Helpers\KuroHtmlPostParser.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Helpers\KuroPostPublishHelper.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Helpers\IFileOpenPickerContinuable.cs" />

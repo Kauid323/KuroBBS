@@ -1,8 +1,10 @@
 using System;
+using Windows.Phone.UI.Input;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Input;
 using Windows.UI.Xaml.Navigation;
+using KuroBBS.Helpers;
 using KuroBBS.Models;
 using KuroBBS.ViewModels;
 
@@ -23,11 +25,45 @@ namespace KuroBBS
         protected override async void OnNavigatedTo(NavigationEventArgs e)
         {
             base.OnNavigatedTo(e);
+
+            // 页面被缓存（Required），OnNavigatedTo 会多次触发；先退订再订阅，避免重复挂载。
+            HardwareButtons.BackPressed -= OnHardwareBackPressed;
+            HardwareButtons.BackPressed += OnHardwareBackPressed;
+
             if (e.NavigationMode == NavigationMode.Back) return;
 
             if (!ViewModel.HasLoaded)
             {
                 await ViewModel.LoadHomepageAsync(2);
+            }
+        }
+
+        protected override void OnNavigatedFrom(NavigationEventArgs e)
+        {
+            HardwareButtons.BackPressed -= OnHardwareBackPressed;
+            base.OnNavigatedFrom(e);
+        }
+
+        /// <summary>
+        /// 返回键优先处理输入框：若搜索框正持有焦点（键盘弹起），
+        /// 按返回键应「先收键盘」，而不是退出页面。
+        /// </summary>
+        private void OnHardwareBackPressed(object sender, BackPressedEventArgs e)
+        {
+            if (e.Handled) return;
+
+            if (SearchInputBox != null && SearchInputBox.FocusState != FocusState.Unfocused)
+            {
+                SearchInputBox.IsTabStop = false;
+                KuroSoftKeyboardHelper.DismissFor(this);
+                e.Handled = true;
+                return;
+            }
+
+            if (Frame != null && Frame.CanGoBack)
+            {
+                e.Handled = true;
+                Frame.GoBack();
             }
         }
 
@@ -51,6 +87,10 @@ namespace KuroBBS
 
         private void OnSearchToggleClick(object sender, RoutedEventArgs e)
         {
+            // 只有用户主动点「搜索」时才把焦点交给输入框（此时才需要键盘）。
+            // 其余时刻 SearchInputBox 的 IsTabStop=false，系统就不会在弹窗/菜单
+            // 关闭时把焦点「还原」到它身上，从而避免键盘被无故顶起。
+            SearchInputBox.IsTabStop = true;
             SearchInputBox.Focus(FocusState.Programmatic);
         }
 
@@ -78,6 +118,10 @@ namespace KuroBBS
         {
             ViewModel.IsSearching = false;
             ViewModel.SearchQuery = "";
+            // 退出搜索：把焦点从输入框移走并恢复 IsTabStop=false，
+            // 这样后续弹窗/菜单关闭时系统不会再把焦点还原到它、把键盘顶起来。
+            SearchInputBox.IsTabStop = false;
+            KuroSoftKeyboardHelper.ClearFocusIfFocused(this, SearchInputBox);
         }
 
         private void OnShortcutItemClick(object sender, ItemClickEventArgs e)
@@ -104,7 +148,7 @@ namespace KuroBBS
             }
         }
 
-        private void OnAnnouncementTapped(object sender, TappedRoutedEventArgs e)
+        private async void OnAnnouncementTapped(object sender, TappedRoutedEventArgs e)
         {
             var element = sender as FrameworkElement;
             if (element == null) return;
@@ -113,7 +157,35 @@ namespace KuroBBS
 
             if (!string.IsNullOrEmpty(ann.LinkUrl))
             {
-                ParseAndNavigateUrl(ann.LinkUrl, ann.Title);
+                ParseAndNavigateUrl(ann.LinkUrl, ann.DisplayTitle);
+            }
+            else if (ann.HasBody)
+            {
+                // 弹窗前先把搜索框的焦点卸掉，否则对话框关闭时系统会把焦点
+                // 「还原」到搜索框，导致关闭 toast 的瞬间软键盘被顶起来。
+                KuroSoftKeyboardHelper.ClearFocusIfFocused(this, SearchInputBox);
+
+                // 「更新日志」这类条目没有跳转链接，点击后弹出完整正文。
+                var dialog = new ContentDialog
+                {
+                    Title = ann.DisplayTitle,
+                    Content = new ScrollViewer
+                    {
+                        Content = new TextBlock
+                        {
+                            Text = ann.Body,
+                            TextWrapping = TextWrapping.Wrap,
+                            FontSize = 13
+                        },
+                        VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                        MaxHeight = 420
+                    },
+                    PrimaryButtonText = "关闭"
+                };
+                await dialog.ShowAsync();
+
+                // 对话框关闭后再次确保焦点不在搜索框上（返回键关闭对话框时尤其需要）。
+                KuroSoftKeyboardHelper.DismissFor(this);
             }
         }
 
@@ -132,9 +204,27 @@ namespace KuroBBS
 
         private void NavigateByShortcut(WikiShortcutItem item)
         {
-            if (item.CatalogueId > 0)
+            // 优先落到模块的「目标目录」——即 content.children 里 active:true 的子目录。
+            // 官方前端就是直接打开这个子目录（图鉴→机体图鉴、攻略→版本攻略、
+            // 剧情→主线剧情、主题影音→节日贺图），而不是父级分组节点。
+            int targetId = item.TargetCatalogueId > 0 ? item.TargetCatalogueId : item.CatalogueId;
+
+            if (targetId > 0)
             {
-                Frame.Navigate(typeof(WikiItemListPage), "2|" + item.CatalogueId + "|" + item.Title);
+                string title = item.Title;
+                // 若目标不是模块自身，用子目录名作为标题，更贴近官方表现。
+                if (targetId != item.CatalogueId && item.Children != null)
+                {
+                    foreach (var c in item.Children)
+                    {
+                        if (c != null && c.Id == targetId && !string.IsNullOrEmpty(c.Name))
+                        {
+                            title = c.Name;
+                            break;
+                        }
+                    }
+                }
+                Frame.Navigate(typeof(WikiItemListPage), "2|" + targetId + "|" + title);
             }
             else if (!string.IsNullOrEmpty(item.EntryId) && item.EntryId != "0")
             {
@@ -150,45 +240,11 @@ namespace KuroBBS
         {
             if (string.IsNullOrEmpty(url)) return;
 
+            // 全软件统一的内链解析：/item/、/post/、/topic/、/user/、?fid=&sid=、站外链接。
+            // PNS 的 wikiType = 2。
             try
             {
-                if (url.Contains("/item/"))
-                {
-                    int itemIdx = url.IndexOf("/item/");
-                    string sub = url.Substring(itemIdx + 6);
-                    int qIdx = sub.IndexOf('?');
-                    string entryId = qIdx >= 0 ? sub.Substring(0, qIdx) : sub;
-                    Frame.Navigate(typeof(WikiEntryDetailPage), "2|" + entryId);
-                    return;
-                }
-
-                if (url.Contains("sid="))
-                {
-                    int sidIdx = url.IndexOf("sid=");
-                    string sub = url.Substring(sidIdx + 4);
-                    int ampIdx = sub.IndexOf('&');
-                    string sidStr = ampIdx >= 0 ? sub.Substring(0, ampIdx) : sub;
-                    int catId;
-                    if (int.TryParse(sidStr, out catId))
-                    {
-                        Frame.Navigate(typeof(WikiItemListPage), "2|" + catId + "|" + title);
-                        return;
-                    }
-                }
-
-                if (url.Contains("fid="))
-                {
-                    int fidIdx = url.IndexOf("fid=");
-                    string sub = url.Substring(fidIdx + 4);
-                    int ampIdx = sub.IndexOf('&');
-                    string fidStr = ampIdx >= 0 ? sub.Substring(0, ampIdx) : sub;
-                    int catId;
-                    if (int.TryParse(fidStr, out catId))
-                    {
-                        Frame.Navigate(typeof(WikiItemListPage), "2|" + catId + "|" + title);
-                        return;
-                    }
-                }
+                KuroBBS.Helpers.KuroLinkNavigator.Navigate(Frame, url, 2, title);
             }
             catch
             {

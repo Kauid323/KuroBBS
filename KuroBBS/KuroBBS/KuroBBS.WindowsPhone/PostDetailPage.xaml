@@ -315,6 +315,26 @@
                                                                LineHeight="18" 
                                                                IsTextSelectionEnabled="False" />
 
+                                                <!-- Comment Images (解析自 commentContent 中 contentType=2 的图片块) -->
+                                                <ItemsControl ItemsSource="{Binding ImageList}"
+                                                              Visibility="{Binding HasImages, Converter={StaticResource BoolToVis}}"
+                                                              Margin="0,2,0,6">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Border Background="#141418" Margin="0,0,0,6"
+                                                                    Tag="{Binding}" Tapped="OnCommentImageTapped">
+                                                                <!-- 宽高来自接口的 imgWidth/imgHeight，加载前即占位，避免列表跳动 -->
+                                                                <Image helpers:KuroGifHelper.GifSource="{Binding Url}"
+                                                                       helpers:KuroLazyImage.SourceUrl="{Binding Url}"
+                                                                       helpers:KuroLazyImage.DecodeWidth="720"
+                                                                       Width="{Binding DisplayWidth}"
+                                                                       Height="{Binding DisplayHeight}"
+                                                                       Stretch="UniformToFill" />
+                                                            </Border>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+
                                                 <!-- Nested Replies / 楼中楼 (Visible when HasReplies is True) -->
                                                 <Border Visibility="{Binding HasReplies, Converter={StaticResource BoolToVis}}" 
                                                         Background="#161622" 
@@ -348,6 +368,26 @@
                                                                                        Margin="0,1,0,0"
                                                                                        LineHeight="16"
                                                                                        IsTextSelectionEnabled="False" />
+
+                                                                        <!-- Reply Images (解析自 replyContent 中 contentType=2 的图片块) -->
+                                                                        <ItemsControl ItemsSource="{Binding ImageList}"
+                                                                                      Visibility="{Binding HasImages, Converter={StaticResource BoolToVis}}"
+                                                                                      Margin="0,3,0,2">
+                                                                            <ItemsControl.ItemTemplate>
+                                                                                <DataTemplate>
+                                                                                    <Border Background="#101018" Margin="0,0,0,4"
+                                                                                            Tag="{Binding}" Tapped="OnCommentImageTapped">
+                                                                                        <!-- 用真实宽高比占位，加载前即有尺寸，避免列表跳动 -->
+                                                                                        <Image helpers:KuroGifHelper.GifSource="{Binding Url}"
+                                                                                               helpers:KuroLazyImage.SourceUrl="{Binding Url}"
+                                                                                               helpers:KuroLazyImage.DecodeWidth="600"
+                                                                                               Width="{Binding DisplayWidth}"
+                                                                                               Height="{Binding DisplayHeight}"
+                                                                                               Stretch="UniformToFill" />
+                                                                                    </Border>
+                                                                                </DataTemplate>
+                                                                            </ItemsControl.ItemTemplate>
+                                                                        </ItemsControl>
                                                                     </StackPanel>
 
                                                                     <!-- Reply Like Button (Compact) -->

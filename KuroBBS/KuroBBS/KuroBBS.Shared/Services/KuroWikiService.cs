@@ -132,13 +132,17 @@ namespace KuroBBS.Services
                                 var aItem = new WikiAnnouncementItem
                                 {
                                     Name = GetString(aObj, "name", "公告"),
-                                    Active = GetBoolean(aObj, "active", true)
+                                    Active = GetBoolean(aObj, "active", true),
+                                    LinkCardVisible = GetBoolean(aObj, "linkCardVisible", false),
+                                    // 公告正文（announcement[].content）是 HTML，
+                                    // 这才是「公告 / 更新日志」的实际内容，必须解析。
+                                    Body = CleanHtmlToText(GetString(aObj, "content", ""))
                                 };
 
                                 if (aObj.ContainsKey("linkCard") && aObj.GetNamedValue("linkCard").ValueType == JsonValueType.Object)
                                 {
                                     var lc = aObj.GetNamedObject("linkCard");
-                                    aItem.Title = GetString(lc, "title", "官方公告");
+                                    aItem.Title = GetString(lc, "title", "");
                                     aItem.Content = GetString(lc, "content", "");
                                     aItem.ImgUrl = GetString(lc, "imgUrl", "");
                                     if (lc.ContainsKey("linkConfig") && lc.GetNamedValue("linkConfig").ValueType == JsonValueType.Object)
@@ -220,6 +224,32 @@ namespace KuroBBS.Services
                                         mItem.LinkType = (int)GetNumber(lc, "linkType", 0);
                                     }
                                 }
+
+                                // 主页模块可能指向「分组节点」（如图鉴=1024），其 getPage 恒为空。
+                                // 这里把挂载的子目录也解析出来，供导航层引导用户逐级进入。
+                                if (mObj.ContainsKey("content") && mObj.GetNamedValue("content").ValueType == JsonValueType.Object)
+                                {
+                                    var cObj = mObj.GetNamedObject("content");
+
+                                    // some modules（如「主题影音」）的 more.linkConfig 里没有 catalogueId，
+                                    // 真正的目标目录挂在 content.id 上（已经验证：主题影音 content.id=1029）。
+                                    // 回退取用，避免这类模块「点了没反应」。
+                                    if (mItem.CatalogueId <= 0)
+                                    {
+                                        int contentId = (int)GetNumber(cObj, "id", 0);
+                                        if (contentId > 0) mItem.CatalogueId = contentId;
+                                    }
+
+                                    if (cObj.ContainsKey("children") && cObj.GetNamedValue("children").ValueType == JsonValueType.Array)
+                                    {
+                                        ParseCatalogueChildren(cObj.GetNamedArray("children"), mItem.Children, mItem.CatalogueId);
+                                    }
+                                }
+
+                                // 计算导航目标：优先落到 content.children 里 active:true 的子目录
+                                // （与官方前端一致：图鉴→机体图鉴、攻略→版本攻略、剧情→主线剧情、主题影音→节日贺图）。
+                                // 若没有 active 标记，则回退到 CatalogueId 本身。
+                                mItem.TargetCatalogueId = ResolveTargetCatalogueId(mItem);
 
                                 data.MainModules.Add(mItem);
                             }
@@ -1536,11 +1566,11 @@ namespace KuroBBS.Services
 
                 var illus = new ConsciousnessIllustration
                 {
-                    Title = GetString(tObj, "title", "立绘"),
-                    TabIconUrl = GetString(tObj, "img", "")
+                    Title = GetStringStatic(tObj, "title", "立绘"),
+                    TabIconUrl = GetStringStatic(tObj, "img", "")
                 };
 
-                string bodyHtml = GetString(tObj, "content", "");
+                string bodyHtml = GetStringStatic(tObj, "content", "");
                 var imgs = ExtractImageUrlsFromHtml(bodyHtml);
                 if (imgs.Count > 0) illus.ImageUrl = imgs[0];
 
@@ -1562,12 +1592,118 @@ namespace KuroBBS.Services
 
         #endregion
 
+        /// <summary>静态版的 GetString：供 static 解析方法（意识手册等）使用。</summary>
+        private static string GetStringStatic(JsonObject obj, string key, string defVal = "")
+        {
+            if (obj == null || !obj.ContainsKey(key)) return defVal;
+            try
+            {
+                var val = obj.GetNamedValue(key);
+                if (val.ValueType == JsonValueType.String) return val.GetString();
+                if (val.ValueType == JsonValueType.Number) return ((long)val.GetNumber()).ToString();
+                if (val.ValueType == JsonValueType.Boolean) return val.GetBoolean().ToString();
+            }
+            catch { }
+            return defVal;
+        }
+
         private static string GetStringFromArrayItem(IJsonValue val)
         {
             if (val == null) return "";
             if (val.ValueType == JsonValueType.String) return val.GetString();
             if (val.ValueType == JsonValueType.Number) return ((long)val.GetNumber()).ToString();
             return "";
+        }
+
+        /// <summary>
+        /// 解析主页模块挂载的子目录节点（递归）。
+        /// 主页模块（mainModules）的 more.linkConfig.catalogueId 常指向「分组节点」，
+        /// 该节点 getPage 为空；真正的条目在 content.children 里。
+        /// </summary>
+        /// <summary>
+        /// 计算主页核心模块的最终导航目录：
+        /// 若 content.children 里存在 active:true 的子目录，则用它（官方前端默认选中项）；
+        /// 否则回退到模块自身的 CatalogueId。
+        /// </summary>
+        private static int ResolveTargetCatalogueId(WikiShortcutItem item)
+        {
+            if (item == null) return 0;
+
+            if (item.Children != null)
+            {
+                // 优先 active 标记
+                foreach (var c in item.Children)
+                {
+                    if (c != null && c.Active && c.Id > 0) return c.Id;
+                }
+            }
+
+            return item.CatalogueId;
+        }
+
+        private static void ParseCatalogueChildren(JsonArray arr, List<WikiCatalogueNode> outList, int parentId)
+        {
+            if (arr == null || outList == null) return;
+            foreach (var cVal in arr)
+            {
+                if (cVal.ValueType != JsonValueType.Object) continue;
+                var cObj = cVal.GetObject();
+
+                var node = new WikiCatalogueNode
+                {
+                    Id = (int)GetNumberStatic(cObj, "id", 0),
+                    Key = (int)GetNumberStatic(cObj, "key", 0),
+                    Name = GetStringStatic(cObj, "name", ""),
+                    ParentId = (int)GetNumberStatic(cObj, "parentId", parentId),
+                    Sort = (int)GetNumberStatic(cObj, "sort", 0),
+                    // 官方前端用 active:true 标记「默认选中的子目录」。
+                    Active = GetBoolStatic(cObj, "active", false)
+                };
+
+                if (cObj.ContainsKey("children") && cObj.GetNamedValue("children").ValueType == JsonValueType.Array)
+                {
+                    ParseCatalogueChildren(cObj.GetNamedArray("children"), node.Children, node.Id);
+                }
+
+                outList.Add(node);
+            }
+        }
+
+        /// <summary>静态版的 GetNumber：供 static 解析方法使用。</summary>
+        private static double GetNumberStatic(JsonObject obj, string key, double defVal = 0)
+        {
+            if (obj == null || !obj.ContainsKey(key)) return defVal;
+            try
+            {
+                var val = obj.GetNamedValue(key);
+                if (val.ValueType == JsonValueType.Number) return val.GetNumber();
+                if (val.ValueType == JsonValueType.String)
+                {
+                    double d;
+                    if (double.TryParse(val.GetString(), out d)) return d;
+                }
+            }
+            catch { }
+            return defVal;
+        }
+
+        /// <summary>静态版的 GetBool：供 static 解析方法使用。兼容 true/false 布尔值及 "true"/"1" 字符串。</summary>
+        private static bool GetBoolStatic(JsonObject obj, string key, bool defVal = false)
+        {
+            if (obj == null || !obj.ContainsKey(key)) return defVal;
+            try
+            {
+                var val = obj.GetNamedValue(key);
+                if (val.ValueType == JsonValueType.Boolean) return val.GetBoolean();
+                if (val.ValueType == JsonValueType.Number) return val.GetNumber() != 0;
+                if (val.ValueType == JsonValueType.String)
+                {
+                    var s = val.GetString();
+                    return string.Equals(s, "true", StringComparison.OrdinalIgnoreCase) || s == "1";
+                }
+            }
+            catch { }
+            return defVal;
         }
 
         private static string CleanHtmlToText(string html)

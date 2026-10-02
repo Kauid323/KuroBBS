@@ -33,6 +33,39 @@ namespace KuroBBS.Models
         public string Url { get; set; }
         public int Width { get; set; }
         public int Height { get; set; }
+
+        /// <summary>是否为竖图（高 &gt; 宽）。竖图在列表里限高会更矮，需要单独限制。</summary>
+        public bool IsPortrait { get { return Height > Width && Width > 0; } }
+
+        /// <summary>
+        /// 列表内的显示宽度（像素）。以 680 为内容区宽度上限，等比缩放；
+        /// 尺寸缺失（0）时回退 360，保证不会算成 0 宽。
+        /// </summary>
+        public double DisplayWidth
+        {
+            get
+            {
+                if (Width <= 0 || Height <= 0) return 360;
+                const double maxW = 680;
+                return Width <= maxW ? Width : maxW;
+            }
+        }
+
+        /// <summary>
+        /// 列表内的显示高度（像素），按真实宽高比换算，并限高。
+        /// 竖长图（如 1080×2046、1320×2856）按 420 限高，横图按 300 限高。
+        /// 这样 <c>Image</c> 在加载前就有正确占位尺寸，列表不会跳动。
+        /// </summary>
+        public double DisplayHeight
+        {
+            get
+            {
+                if (Width <= 0 || Height <= 0) return 360;
+                double maxH = IsPortrait ? 420 : 300;
+                double h = DisplayWidth * ((double)Height / Width);
+                return h <= maxH ? h : maxH;
+            }
+        }
     }
 
     public enum ContentBlockType
@@ -179,6 +212,8 @@ namespace KuroBBS.Models
         public bool HasToUser { get { return !string.IsNullOrEmpty(ToUserName); } }
         public string ReplyText { get; set; }
         public List<PostTextRun> ContentRuns { get; set; }
+        public List<PostImage> ImageList { get; set; }
+        public bool HasImages { get { return ImageList != null && ImageList.Count > 0; } }
         public string ReplyTimeStr { get; set; }
         public string IpRegion { get; set; }
 
@@ -203,6 +238,7 @@ namespace KuroBBS.Models
         public PostReplyItem()
         {
             ContentRuns = new List<PostTextRun>();
+            ImageList = new List<PostImage>();
         }
 
         public event PropertyChangedEventHandler PropertyChanged;
@@ -225,6 +261,8 @@ namespace KuroBBS.Models
         public string AvatarUrl { get; set; }
         public string Content { get; set; }
         public List<PostTextRun> ContentRuns { get; set; }
+        public List<PostImage> ImageList { get; set; }
+        public bool HasImages { get { return ImageList != null && ImageList.Count > 0; } }
         public List<PostReplyItem> Replies { get; set; }
         public bool HasReplies { get { return Replies != null && Replies.Count > 0; } }
         public string CreateTimeStr { get; set; }
@@ -254,6 +292,7 @@ namespace KuroBBS.Models
         public PostCommentItem()
         {
             ContentRuns = new List<PostTextRun>();
+            ImageList = new List<PostImage>();
             Replies = new List<PostReplyItem>();
         }
 
@@ -861,17 +900,75 @@ namespace KuroBBS.Models
         public string EntryId { get; set; }
         public string LinkUrl { get; set; }
         public int LinkType { get; set; }
+
+        /// <summary>
+        /// 该模块在主页下挂载的子目录节点（图鉴/攻略 等分组节点才有）。
+        /// 若 CatalogueId 指向的是分组节点（getPage 返回空），
+        /// 需要引导用户进入目录树逐级选择，而不是直接打开空列表。
+        /// </summary>
+        public List<WikiCatalogueNode> Children { get; set; }
+
+        public bool HasChildren { get { return Children != null && Children.Count > 0; } }
+
+        /// <summary>
+        /// 模块目标目录（最终应导航到的 catalogueId）。
+        ///
+        /// 背景：主页核心模块（图鉴/游戏攻略/剧情/主题影音…）官方前端在点击时，
+        /// 会直接落到它 content.children 里 <c>active:true</c> 的那个子目录，
+        /// 而不是父级分组节点（父级 getPage 恒为空）。
+        /// 例如：
+        ///   图鉴(1024)   → 机体图鉴(1030, active)
+        ///   游戏攻略(1456) → 版本攻略(1465, active)
+        ///   剧情(1252)   → 主线剧情(1253, active)
+        ///   主题影音(1029) → 节日贺图(1089, active)
+        ///
+        /// 若模块自身就指向一个叶子目录（content.children 为空，或没有 active 子节点），
+        /// 则回退为 CatalogueId。
+        /// </summary>
+        public int TargetCatalogueId { get; set; }
+
+        public WikiShortcutItem()
+        {
+            Children = new List<WikiCatalogueNode>();
+        }
     }
 
     public class WikiAnnouncementItem
     {
+        /// <summary>公告分组名，如「公告」「更新日志」。</summary>
         public string Name { get; set; }
+        /// <summary>linkCard 的标题（顶部反馈卡片标题，可能为空）。</summary>
         public string Title { get; set; }
+        /// <summary>linkCard 的副标题（顶部反馈卡片描述，可能为空）。</summary>
         public string Content { get; set; }
+        /// <summary>linkCard 配图。</summary>
         public string ImgUrl { get; set; }
         public string LinkUrl { get; set; }
         public int LinkType { get; set; }
+        /// <summary>公告是否启用（对应接口 announcement[].active）。</summary>
         public bool Active { get; set; }
+        /// <summary>是否展示顶部 linkCard（对应接口 linkCardVisible）。</summary>
+        public bool LinkCardVisible { get; set; }
+        /// <summary>
+        /// 公告正文（接口 announcement[].content，HTML 已转为纯文本）。
+        /// 这是公告的实际内容，「更新日志」等条目主要靠它展示。
+        /// </summary>
+        public string Body { get; set; }
+        /// <summary>
+        /// 列表标题：优先用 linkCard.title，为空时回退到分组名 Name，
+        /// 避免「更新日志」这类无 linkCard 标题的条目渲染成空白。
+        /// </summary>
+        public string DisplayTitle
+        {
+            get
+            {
+                if (!string.IsNullOrWhiteSpace(Title)) return Title;
+                if (!string.IsNullOrWhiteSpace(Name)) return Name;
+                return "公告";
+            }
+        }
+        /// <summary>正文纯文本是否非空（供 XAML 控制正文段落可见性）。</summary>
+        public bool HasBody { get { return !string.IsNullOrWhiteSpace(Body); } }
     }
 
     public class WikiContributorItem
@@ -896,6 +993,10 @@ namespace KuroBBS.Models
         public int ParentId { get; set; }
         public int Level { get; set; }
         public int Sort { get; set; }
+
+        /// <summary>主页模块的 content.children 中，官方前端默认选中的子目录（active:true）。</summary>
+        public bool Active { get; set; }
+
         public List<WikiCatalogueNode> Children { get; set; }
         public bool HasChildren { get { return Children != null && Children.Count > 0; } }
         public bool IsLeaf { get { return !HasChildren; } }

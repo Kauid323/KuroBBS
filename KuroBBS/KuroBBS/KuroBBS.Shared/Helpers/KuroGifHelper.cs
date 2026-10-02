@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices.WindowsRuntime;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Windows.Graphics.Imaging;
@@ -85,6 +86,14 @@ namespace KuroBBS.Helpers
                 return;
             }
 
+            // 性能关键：非 GIF 图片完全不需要走「下载全部字节 → 解析帧」这条重路径。
+            // 画册类条目（图鉴 > 画册）动辄 40+ 张全宽 PNG，若每张都后台下载整张图只为
+            // 读一个魔数，会同时打爆网络与内存，并拖垮 UI 线程。这里按扩展名直接短路。
+            if (!LooksLikeGifUrl(url))
+            {
+                return;
+            }
+
             int maxWidth = GetMaxDecodeWidth(image);
             if (maxWidth <= 0) maxWidth = 480;
 
@@ -103,6 +112,31 @@ namespace KuroBBS.Helpers
             image.Loaded += OnImageLoaded;
 
             StartPlayback(image, state);
+        }
+
+        /// <summary>
+        /// 仅当 URL 明确指向 .gif 时才认为是动图。CDN 有时会把扩展名放在 query 里，
+        /// 因此同时检查 path 与 query 段；其它一律返回 false（当作静态图处理）。
+        /// </summary>
+        private static bool LooksLikeGifUrl(string url)
+        {
+            if (string.IsNullOrWhiteSpace(url)) return false;
+            try
+            {
+                int q = url.IndexOf('?');
+                string path = q >= 0 ? url.Substring(0, q) : url;
+                if (path.EndsWith(".gif", StringComparison.OrdinalIgnoreCase)) return true;
+
+                // 少数 CDN 形如 .../xxx?format=gif 或 ?type=image/gif
+                if (q >= 0)
+                {
+                    string query = url.Substring(q + 1);
+                    if (query.IndexOf("image/gif", StringComparison.OrdinalIgnoreCase) >= 0) return true;
+                    if (Regex.IsMatch(query, @"(?:^|&)(?:format|type|ext)=gif(?:&|$)", RegexOptions.IgnoreCase)) return true;
+                }
+            }
+            catch { }
+            return false;
         }
 
         private static void OnImageUnloaded(object sender, RoutedEventArgs e)

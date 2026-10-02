@@ -516,6 +516,33 @@ namespace KuroBBS
             }
         }
 
+        /// <summary>
+        /// 评论区图片点击：Tag 绑定的是 PostImage（含 Url/Width/Height）。
+        /// 复用与正文图片相同的全屏图片查看器。
+        /// </summary>
+        private void OnCommentImageTapped(object sender, TappedRoutedEventArgs e)
+        {
+            var element = sender as FrameworkElement;
+            if (element == null || ViewModel == null) return;
+
+            string url = null;
+
+            var img = element.Tag as KuroBBS.Models.PostImage;
+            if (img != null)
+            {
+                url = img.Url;
+            }
+            else if (element.Tag is string)
+            {
+                url = element.Tag as string;
+            }
+
+            if (!string.IsNullOrEmpty(url))
+            {
+                ViewModel.OpenImageCommand.Execute(url);
+            }
+        }
+
         private void OnAuthorHeaderTapped(object sender, TappedRoutedEventArgs e)
         {
             if (ViewModel != null && ViewModel.Post != null && ViewModel.Post.Author != null && !string.IsNullOrEmpty(ViewModel.Post.Author.UserId))

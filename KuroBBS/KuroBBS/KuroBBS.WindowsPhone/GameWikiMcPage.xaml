@@ -43,6 +43,7 @@
                     <TextBox x:Name="SearchInputBox" PlaceholderText="搜索鸣潮角色、武器、声骸、攻略..."
                              Text="{Binding SearchQuery, Mode=TwoWay}"
                              KeyDown="OnSearchKeyDown"
+                             IsTabStop="False"
                              Background="#1B1B22" BorderBrush="#2C2C36" Foreground="White" Margin="0,0,8,0" />
                     <Button Grid.Column="1" Content="搜索" Click="OnSearchClick"
                             Background="{StaticResource MetroAccentBrush}" Foreground="White"
@@ -137,8 +138,21 @@
                                     <Grid Margin="0,0,0,6" Background="#1E1E26" Tapped="OnAnnouncementTapped" Tag="{Binding}">
                                         <Border BorderBrush="#2C2C36" BorderThickness="1" Padding="10,8">
                                             <StackPanel>
-                                                <TextBlock Text="{Binding Title}" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource MetroAccentBrush}" TextTrimming="CharacterEllipsis" />
-                                                <TextBlock Text="{Binding Content}" FontSize="12" Foreground="{StaticResource MetroSubTextBrush}" Margin="0,2,0,0" TextWrapping="Wrap" MaxLines="2" />
+                                                <TextBlock Text="{Binding DisplayTitle}" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource MetroAccentBrush}" TextTrimming="CharacterEllipsis" />
+                                                <!-- 顶部 linkCard（由接口 linkCardVisible 决定） -->
+                                                <StackPanel Visibility="{Binding LinkCardVisible, Converter={StaticResource BoolToVis}}" Margin="0,4,0,0">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <Border Width="36" Height="36" Background="#141418" Margin="0,0,8,0">
+                                                            <Image Source="{Binding ImgUrl, Converter={StaticResource ImageCache}}" Stretch="UniformToFill" />
+                                                        </Border>
+                                                        <StackPanel VerticalAlignment="Center">
+                                                            <TextBlock Text="{Binding Title}" FontSize="12" FontWeight="SemiBold" Foreground="White" TextTrimming="CharacterEllipsis" />
+                                                            <TextBlock Text="{Binding Content}" FontSize="11" Foreground="{StaticResource MetroSubTextBrush}" TextWrapping="Wrap" />
+                                                        </StackPanel>
+                                                    </StackPanel>
+                                                </StackPanel>
+                                                <!-- 公告正文（接口 announcement[].content） -->
+                                                <TextBlock Text="{Binding Body}" Visibility="{Binding HasBody, Converter={StaticResource BoolToVis}}" FontSize="12" Foreground="{StaticResource MetroSubTextBrush}" Margin="0,4,0,0" TextWrapping="Wrap" MaxLines="4" TextTrimming="CharacterEllipsis" />
                                             </StackPanel>
                                         </Border>
                                     </Grid>
