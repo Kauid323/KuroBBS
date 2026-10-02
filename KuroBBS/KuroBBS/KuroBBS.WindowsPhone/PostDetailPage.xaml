@@ -266,6 +266,32 @@
                                     <Setter Property="Padding" Value="0" />
                                 </Style>
                             </ListView.ItemContainerStyle>
+                            <ListView.Footer>
+                                <!-- 加载更多评论按钮 -->
+                                <Button HorizontalAlignment="Center"
+                                        Margin="0,6,0,20"
+                                        MinWidth="160"
+                                        MinHeight="40"
+                                        Background="#1A1A22"
+                                        BorderBrush="#33333D"
+                                        BorderThickness="1"
+                                        Foreground="White"
+                                        FontSize="13"
+                                        Command="{Binding LoadMoreCommentsCommand}"
+                                        Visibility="{Binding HasMoreComments, Converter={StaticResource BoolToVis}}">
+                                    <Grid>
+                                        <TextBlock Text="加载更多评论"
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center"
+                                                   Visibility="{Binding IsLoadingComments, Converter={StaticResource InvBoolToVis}}" />
+                                        <TextBlock Text="加载中..."
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center"
+                                                   Foreground="{StaticResource MetroSubTextBrush}"
+                                                   Visibility="{Binding IsLoadingComments, Converter={StaticResource BoolToVis}}" />
+                                    </Grid>
+                                </Button>
+                            </ListView.Footer>
                             <ListView.ItemTemplate>
                                 <DataTemplate>
                                     <Border Background="{StaticResource MetroCardBackgroundBrush}" Padding="12" BorderBrush="#26262E" BorderThickness="1">
@@ -300,11 +326,39 @@
                                                         <Border Background="#20FFFFFF" Padding="4,1" Margin="0,0,6,0" VerticalAlignment="Center">
                                                             <TextBlock Text="{Binding FloorText}" FontSize="9" Foreground="{StaticResource MetroSubTextBrush}" />
                                                         </Border>
+                                                        <!-- 官方 / 楼主 标识 -->
+                                                        <Border Background="#332A6BFF" Padding="4,1" Margin="0,0,6,0" VerticalAlignment="Center"
+                                                                Visibility="{Binding IsOfficial, Converter={StaticResource BoolToVis}}">
+                                                            <TextBlock Text="官方" FontSize="9" Foreground="#7FB2FF" />
+                                                        </Border>
+                                                        <Border Background="#33FF9F2A" Padding="4,1" Margin="0,0,6,0" VerticalAlignment="Center"
+                                                                Visibility="{Binding IsPublisher, Converter={StaticResource BoolToVis}}">
+                                                            <TextBlock Text="楼主" FontSize="9" Foreground="#FFB65C" />
+                                                        </Border>
                                                         <TextBlock Text="{Binding IpRegion}" FontSize="10" Foreground="{StaticResource MetroSubTextBrush}" VerticalAlignment="Center" />
                                                     </StackPanel>
 
                                                     <TextBlock Grid.Column="1" Text="{Binding CreateTimeStr}" FontSize="11" Foreground="{StaticResource MetroSubTextBrush}" VerticalAlignment="Center" />
                                                 </Grid>
+
+                                                <!-- 身份标签（newIdentifyNames，如「鸣潮WIKI成员」「摄影师」「攻略作者」「考据帝」） -->
+                                                <ItemsControl ItemsSource="{Binding IdentifyNames}"
+                                                              Visibility="{Binding HasIdentifyNames, Converter={StaticResource BoolToVis}}"
+                                                              Margin="0,0,0,4">
+                                                    <ItemsControl.ItemsPanel>
+                                                        <ItemsPanelTemplate>
+                                                            <StackPanel Orientation="Horizontal" />
+                                                        </ItemsPanelTemplate>
+                                                    </ItemsControl.ItemsPanel>
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Border Background="#1E2A3A" BorderBrush="#2E5B8C" BorderThickness="1"
+                                                                    CornerRadius="2" Padding="5,1" Margin="0,0,5,0">
+                                                                <TextBlock Text="{Binding}" FontSize="9.5" Foreground="#6FB3FF" />
+                                                            </Border>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
 
                                                 <!-- Comment Text with Rich Inline Emojis -->
                                                 <RichTextBlock helpers:InlineRunsHelper.RunsSource="{Binding ContentRuns}" 
@@ -316,19 +370,27 @@
                                                                IsTextSelectionEnabled="False" />
 
                                                 <!-- Comment Images (解析自 commentContent 中 contentType=2 的图片块) -->
+                                                <!-- 列表里只出缩略图：固定 90x90 方格 + 低分辨率解码，点开才载全图。
+                                                     用横向 StackPanel 而非 VariableSizedWrapGrid：
+                                                     后者在没有 ItemWidth 时会用「第一个子项的宽度」当整列宽，
+                                                     遇到宽高比不同的图会把格子撑得忽大忽小（评论高度异常）。 -->
                                                 <ItemsControl ItemsSource="{Binding ImageList}"
                                                               Visibility="{Binding HasImages, Converter={StaticResource BoolToVis}}"
                                                               Margin="0,2,0,6">
+                                                    <ItemsControl.ItemsPanel>
+                                                        <ItemsPanelTemplate>
+                                                            <StackPanel Orientation="Horizontal" />
+                                                        </ItemsPanelTemplate>
+                                                    </ItemsControl.ItemsPanel>
                                                     <ItemsControl.ItemTemplate>
                                                         <DataTemplate>
-                                                            <Border Background="#141418" Margin="0,0,0,6"
+                                                            <Border Background="#141418" Margin="0,0,4,0"
                                                                     Tag="{Binding}" Tapped="OnCommentImageTapped">
-                                                                <!-- 宽高来自接口的 imgWidth/imgHeight，加载前即占位，避免列表跳动 -->
                                                                 <Image helpers:KuroGifHelper.GifSource="{Binding Url}"
                                                                        helpers:KuroLazyImage.SourceUrl="{Binding Url}"
-                                                                       helpers:KuroLazyImage.DecodeWidth="720"
-                                                                       Width="{Binding DisplayWidth}"
-                                                                       Height="{Binding DisplayHeight}"
+                                                                       helpers:KuroLazyImage.DecodeWidth="200"
+                                                                       Width="90"
+                                                                       Height="90"
                                                                        Stretch="UniformToFill" />
                                                             </Border>
                                                         </DataTemplate>
@@ -342,6 +404,7 @@
                                                         BorderThickness="1" 
                                                         Padding="8,6" 
                                                         Margin="0,2,0,6">
+                                                    <StackPanel>
                                                     <ItemsControl ItemsSource="{Binding Replies}">
                                                         <ItemsControl.ItemTemplate>
                                                             <DataTemplate>
@@ -370,19 +433,24 @@
                                                                                        IsTextSelectionEnabled="False" />
 
                                                                         <!-- Reply Images (解析自 replyContent 中 contentType=2 的图片块) -->
+                                                                        <!-- 楼中楼同样只出缩略图：固定 72x72 方格 -->
                                                                         <ItemsControl ItemsSource="{Binding ImageList}"
                                                                                       Visibility="{Binding HasImages, Converter={StaticResource BoolToVis}}"
                                                                                       Margin="0,3,0,2">
+                                                                            <ItemsControl.ItemsPanel>
+                                                                                <ItemsPanelTemplate>
+                                                                                    <StackPanel Orientation="Horizontal" />
+                                                                                </ItemsPanelTemplate>
+                                                                            </ItemsControl.ItemsPanel>
                                                                             <ItemsControl.ItemTemplate>
                                                                                 <DataTemplate>
-                                                                                    <Border Background="#101018" Margin="0,0,0,4"
+                                                                                    <Border Background="#101018" Margin="0,0,4,0"
                                                                                             Tag="{Binding}" Tapped="OnCommentImageTapped">
-                                                                                        <!-- 用真实宽高比占位，加载前即有尺寸，避免列表跳动 -->
                                                                                         <Image helpers:KuroGifHelper.GifSource="{Binding Url}"
                                                                                                helpers:KuroLazyImage.SourceUrl="{Binding Url}"
-                                                                                               helpers:KuroLazyImage.DecodeWidth="600"
-                                                                                               Width="{Binding DisplayWidth}"
-                                                                                               Height="{Binding DisplayHeight}"
+                                                                                               helpers:KuroLazyImage.DecodeWidth="160"
+                                                                                               Width="72"
+                                                                                               Height="72"
                                                                                                Stretch="UniformToFill" />
                                                                                     </Border>
                                                                                 </DataTemplate>
@@ -409,6 +477,30 @@
                                                             </DataTemplate>
                                                         </ItemsControl.ItemTemplate>
                                                     </ItemsControl>
+
+                                                    <!-- 展开更多回复（楼中楼分页，走 getReplyList） -->
+                                                    <Button HorizontalAlignment="Left"
+                                                            Background="Transparent"
+                                                            BorderBrush="#2E5B8C"
+                                                            BorderThickness="0,1,0,0"
+                                                            Foreground="#4DA6FF"
+                                                            FontSize="11.5"
+                                                            Padding="0,6,0,1"
+                                                            Margin="0,4,0,0"
+                                                            MinWidth="0"
+                                                            MinHeight="0"
+                                                            Command="{Binding DataContext.LoadMoreRepliesCommand, ElementName=RootLayoutGrid}"
+                                                            CommandParameter="{Binding}"
+                                                            Visibility="{Binding HasMoreReplies, Converter={StaticResource BoolToVis}}">
+                                                        <Grid>
+                                                            <TextBlock Text="{Binding ReplyExpandText}"
+                                                                       Visibility="{Binding IsLoadingReplies, Converter={StaticResource InvBoolToVis}}" />
+                                                            <TextBlock Text="加载中..."
+                                                                       Foreground="#888894"
+                                                                       Visibility="{Binding IsLoadingReplies, Converter={StaticResource BoolToVis}}" />
+                                                        </Grid>
+                                                    </Button>
+                                                    </StackPanel>
                                                 </Border>
 
                                                 <!-- Comment Footer -->
@@ -486,6 +578,13 @@
               Visibility="{Binding IsImageViewerOpen, Converter={StaticResource BoolToVis}}"
               Background="#F8000000"
               Canvas.ZIndex="3000">
+            <Grid.RowDefinitions>
+                <!-- 主图区：占满剩余空间 -->
+                <RowDefinition Height="*" />
+                <!-- 预览条：固定约为 1/9 屏高（9:1 区域），只放缩略图 -->
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
             <Grid.Transitions>
                 <TransitionCollection>
                     <EntranceThemeTransition />
@@ -494,6 +593,7 @@
 
             <!-- ScrollViewer with pinch-to-zoom & smooth panning -->
             <ScrollViewer x:Name="ImageViewerScrollViewer"
+                          Grid.Row="0"
                           HorizontalScrollBarVisibility="Hidden"
                           VerticalScrollBarVisibility="Hidden"
                           ZoomMode="Enabled"
@@ -502,14 +602,70 @@
                           DoubleTapped="OnImageViewerDoubleTapped"
                           Tapped="OnImageViewerBackgroundTapped">
                 <Grid x:Name="ImageViewerContainer" HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <!-- 用异步加载替代原先同步的 ImageCacheConverter，避免打开大图卡死 UI -->
                     <Image x:Name="ViewerImage"
-                           Source="{Binding SelectedImageUrl, Converter={StaticResource ImageCacheConverter}}"
+                           helpers:KuroLazyImage.SourceUrl="{Binding SelectedImageUrl}"
+                           helpers:KuroLazyImage.DecodeWidth="1080"
                            Stretch="Uniform"
                            HorizontalAlignment="Center"
                            VerticalAlignment="Center"
                            ImageOpened="OnViewerImageOpened" />
+
+                    <!-- 大图未就绪时的占位骨架（不阻塞交互） -->
+                    <ProgressBar x:Name="ViewerLoadingBar"
+                                 IsIndeterminate="True"
+                                 Width="140"
+                                 HorizontalAlignment="Center"
+                                 VerticalAlignment="Center"
+                                 Foreground="{StaticResource MetroAccentBrush}"
+                                 Opacity="0.8" />
                 </Grid>
             </ScrollViewer>
+
+            <!-- ===== 9:1 预览条：底部窄带，全是缩略图 ===== -->
+            <Border Grid.Row="1"
+                    x:Name="ViewerPreviewStrip"
+                    Height="86"
+                    Background="#CC0E0E14"
+                    VerticalAlignment="Bottom"
+                    Visibility="{Binding HasViewerImages, Converter={StaticResource BoolToVis}}">
+                <ListView x:Name="ViewerThumbList"
+                          ItemsSource="{Binding ViewerImages}"
+                          SelectedIndex="{Binding SelectedViewerIndex, Mode=TwoWay}"
+                          SelectionMode="Single"
+                          ScrollViewer.HorizontalScrollMode="Enabled"
+                          ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                          ScrollViewer.VerticalScrollMode="Disabled"
+                          ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                          Padding="8,6"
+                          Background="Transparent">
+                    <ListView.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <ItemsStackPanel Orientation="Horizontal" />
+                        </ItemsPanelTemplate>
+                    </ListView.ItemsPanel>
+                    <ListView.ItemContainerStyle>
+                        <Style TargetType="ListViewItem">
+                            <Setter Property="MinWidth" Value="0" />
+                            <Setter Property="MinHeight" Value="0" />
+                            <Setter Property="Padding" Value="0" />
+                            <Setter Property="Margin" Value="0,0,6,0" />
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                            <Setter Property="VerticalContentAlignment" Value="Stretch" />
+                        </Style>
+                    </ListView.ItemContainerStyle>
+                    <ListView.ItemTemplate>
+                        <DataTemplate>
+                            <Border BorderBrush="#33FFFFFF" BorderThickness="1" Width="66" Height="66">
+                                <Image helpers:KuroGifHelper.GifSource="{Binding Url}"
+                                       helpers:KuroLazyImage.SourceUrl="{Binding Url}"
+                                       helpers:KuroLazyImage.DecodeWidth="120"
+                                       Stretch="UniformToFill" />
+                            </Border>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+            </Border>
 
             <!-- Top Minimal Floating Toolbar (Save & Close) -->
             <Grid VerticalAlignment="Top" HorizontalAlignment="Stretch" Margin="12,12,12,0">
@@ -551,10 +707,11 @@
 
             <!-- Save Notification Toast Banner -->
             <Border x:Name="SaveToastBorder"
+                    Grid.Row="0"
                     Visibility="Collapsed"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Bottom"
-                    Margin="0,0,0,48"
+                    Margin="0,0,0,16"
                     Background="#E61C1C24"
                     BorderBrush="#33FFFFFF"
                     BorderThickness="1"

@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using Windows.Storage;
 using Windows.UI.Core;
 
 namespace KuroBBS.Services
@@ -83,6 +84,86 @@ namespace KuroBBS.Services
                 message, 
                 string.IsNullOrEmpty(details) ? "" : "\nDetails: " + details);
             Debug.WriteLine(formatted);
+
+            // 【关键】同时落盘到 LocalFolder\kuro.log。
+            // 之前只写 Debug.WriteLine —— 一旦脱离调试器（或调试器未抓 Output），
+            // 崩溃现场就完全没有记录，导致「闪退且无日志、无法定位」。
+            WriteToFile(level, formatted);
+        }
+
+        // ---------- 持久化日志（落盘） ----------
+
+        private static readonly object _fileLock = new object();
+        private static bool _fileDisabled;
+
+        /// <summary>应用启动时立即创建的日志文件（LocalFolder\kuro.log）。</summary>
+        private static StorageFile _logFile;
+
+        /// <summary>
+        /// 在应用启动（无调试器场景）时调用，确保 kuro.log 文件存在。
+        /// 不会抛异常：任何失败都静默降级为「仅 Debug 输出」。
+        /// </summary>
+        public static void EnsureFileCreated(string appVersion = null)
+        {
+            try
+            {
+                var folder = ApplicationData.Current.LocalFolder;
+                var file = folder.CreateFileAsync("kuro.log", CreationCollisionOption.OpenIfExists)
+                                 .AsTask().GetAwaiter().GetResult();
+                _logFile = file;
+
+                string header = "\r\n===== KuroBBS started " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
+                              + " (v" + (appVersion ?? "?") + ") =====\r\n";
+                AppendRaw(header);
+            }
+            catch
+            {
+                _fileDisabled = true;
+            }
+        }
+
+        private static void WriteToFile(LogLevel level, string text)
+        {
+            // 只落盘关键级别，避免正常 Info 刷爆文件。
+            if (level == LogLevel.Info || level == LogLevel.Loading || level == LogLevel.Thread)
+            {
+                return;
+            }
+            AppendRaw("[" + DateTime.Now.ToString("HH:mm:ss.fff") + "] " + text + "\r\n");
+        }
+
+        /// <summary>强制写一行（任何级别都用，供崩溃/阶段追踪使用）。</summary>
+        public static void Trace(string text)
+        {
+            try { Debug.WriteLine("[TRACE] " + text); } catch { }
+            AppendRaw("[" + DateTime.Now.ToString("HH:mm:ss.fff") + "] [TRACE] " + text + "\r\n");
+        }
+
+        private static void AppendRaw(string text)
+        {
+            if (_fileDisabled) return;
+            lock (_fileLock)
+            {
+                try
+                {
+                    if (_logFile == null)
+                    {
+                        _logFile = ApplicationData.Current.LocalFolder
+                            .CreateFileAsync("kuro.log", CreationCollisionOption.OpenIfExists)
+                            .AsTask().GetAwaiter().GetResult();
+                    }
+
+                    // 每次追加都独立打开/关闭，保证即使进程被强杀（StackOverflow / fail-fast），
+                    // 之前写入的每一行也已经 flush 到磁盘，不会随进程一起丢失。
+                    // WP8.1 没有 System.IO.File，统一使用 WinRT 的 FileIO.AppendTextAsync。
+                    Windows.Storage.FileIO.AppendTextAsync(_logFile, text)
+                        .AsTask().GetAwaiter().GetResult();
+                }
+                catch
+                {
+                    _fileDisabled = true;
+                }
+            }
         }
 
         public void Clear()

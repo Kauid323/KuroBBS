@@ -105,7 +105,7 @@
                         </StackPanel>
                     </Border>
 
-                    <Border Grid.Column="1" Padding="4,4">
+                    <Border Grid.Column="1" Padding="4,4" IsTapEnabled="True" Tapped="OnFollowingTapped">
                         <StackPanel HorizontalAlignment="Center">
                             <TextBlock Text="{Binding Profile.FollowingCount}" FontWeight="Bold" FontSize="16" Foreground="White" HorizontalAlignment="Center" />
                             <TextBlock Text="关注" FontSize="11" Foreground="{StaticResource MetroSubTextBrush}" HorizontalAlignment="Center" Margin="0,2,0,0" />

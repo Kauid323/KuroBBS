@@ -4,20 +4,18 @@ using Windows.UI.Xaml.Controls;
 namespace KuroBBS.Helpers
 {
     /// <summary>
-    /// 软键盘（输入法）控制工具。
+    /// 软键盘（输入法）控制工具 —— **仅 Windows Phone 8.1 head 使用**。
     ///
-    /// 背景：WP8.1 / UWP 上，只要某个 TextBox 持有焦点，软键盘就会弹出；
-    /// 而 ContentDialog / 弹窗关闭时，系统又会把焦点「还原」到上一次聚焦的
-    /// 控件——如果那是个搜索框，键盘就会莫名其妙地再弹出来。
+    /// 为什么放在 KuroBBS.WindowsPhone 而不是 KuroBBS.Shared：
+    /// 这段逻辑依赖 WP 专有的交互习惯（Back 键收起键盘、避免系统把焦点还原到搜索框）。
+    /// 之前放在 Shared 里，Shared 是「源码共享」给两个 head 的，
+    /// 桌面版（KuroBBS.Windows）并没有这些需求，也缺少对应 API（如 InputPane.TryHide），
+    /// 结果一改 Shared 就顺手把桌面版编崩。
+    /// WP 专属适配代码一律留在本 head 项目内。
     ///
-    /// 处理原则很简单：**别让输入框自动持有焦点**。需要时把焦点从输入框上
-    /// 移走（交给承载页），键盘自然收起。
-    ///
-    /// 注意：这里刻意**不用** InputPane.TryHide()。
-    /// 本文件是「源码共享」给 KuroBBS.Windows（Win8.1 桌面）与
-    /// KuroBBS.WindowsPhone（WP8.1）两个 head 项目的，
-    /// 而 Win8.1 桌面版的 InputPane 并没有 TryHide()，会编译失败。
-    /// 只靠转移焦点就已足够收起键盘。
+    /// 处理原则很简单：**别让输入框自动持有焦点**。
+    /// 需要时把焦点从输入框上移走（交给承载页），键盘自然收起——
+    /// 刻意不调 InputPane.TryHide()，只靠转移焦点就已足够。
     /// </summary>
     public static class KuroSoftKeyboardHelper
     {

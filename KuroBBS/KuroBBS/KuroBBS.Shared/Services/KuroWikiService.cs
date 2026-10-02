@@ -550,6 +550,7 @@ namespace KuroBBS.Services
 
                     var headers = BuildWikiHeaders(wikiType);
                     var json = await KuroApiClient.Instance.PostFormAsync("/wiki/core/catalogue/item/getEntryDetail", parameters, headers);
+                    KuroLogger.Trace("WIKI_ENTRY_HTTP_DONE id=" + entryId);
 
                     if (json != null && json.ContainsKey("data") && json.GetNamedValue("data").ValueType == JsonValueType.Object)
                     {
@@ -617,6 +618,7 @@ namespace KuroBBS.Services
                                         {
                                             comp.RoleInfo = ParseRoleComponent(cpObj);
                                         }
+                                        KuroLogger.Trace("WIKI_COMP_BEGIN type=" + comp.Type + " title=" + comp.Title);
 
                                         // 2. Tabs Component
                                         if (comp.Type == "tabs-component" && cpObj.ContainsKey("tabs") && cpObj.GetNamedValue("tabs").ValueType == JsonValueType.Array)
@@ -632,6 +634,7 @@ namespace KuroBBS.Services
                                                     RawContent = GetString(tObj, "content", ""),
                                                     IsSelected = GetBoolean(tObj, "active", false)
                                                 };
+                                                KuroLogger.Trace("WIKI_TAB_BEGIN title=" + tabItem.Title + " len=" + (tabItem.RawContent != null ? tabItem.RawContent.Length : 0));
 
                                                 // Extract structured rich subcomponents
                                                 tabItem.BigImageUrl = ExtractBigIllustration(tabItem.RawContent);
@@ -730,6 +733,10 @@ namespace KuroBBS.Services
                                                 tabItem.Runs = KuroHtmlPostParser.ParseInlineHtml(tabItem.RawContent, false, null);
                                                 tabItem.ImageList = ExtractImageUrlsFromHtml(tabItem.RawContent);
                                                 comp.Tabs.Add(tabItem);
+                                                KuroLogger.Trace("WIKI_TAB_DONE title=" + tabItem.Title
+                                                                 + " sections=" + (tabItem.Sections != null ? tabItem.Sections.Count : 0)
+                                                                 + " runs=" + (tabItem.Runs != null ? tabItem.Runs.Count : 0)
+                                                                 + " imgs=" + (tabItem.ImageList != null ? tabItem.ImageList.Count : 0));
                                             }
 
                                             if (comp.Tabs.Count > 0)
@@ -806,22 +813,41 @@ namespace KuroBBS.Services
                                             }
                                         }
 
-                                        // Clean text, Runs, and extract images for text/basic components
-                                        if (!string.IsNullOrEmpty(comp.Content))
-                                        {
-                                            comp.CleanText = CleanHtmlToText(comp.Content);
-                                            comp.Runs = KuroHtmlPostParser.ParseInlineHtml(comp.Content, false, null);
-                                            var extractedImgs = ExtractImageUrlsFromHtml(comp.Content);
-                                            foreach (var img in extractedImgs)
-                                            {
-                                                if (!comp.ImageList.Contains(img))
-                                                {
-                                                    comp.ImageList.Add(img);
-                                                }
-                                            }
-                                        }
+                        // Clean text, Runs, and extract images for text/basic components
+                        if (!string.IsNullOrEmpty(comp.Content))
+                        {
+                            comp.CleanText = CleanHtmlToText(comp.Content);
+                            comp.Runs = KuroHtmlPostParser.ParseInlineHtml(comp.Content, false, null);
+                            var extractedImgs = ExtractImageUrlsFromHtml(comp.Content);
+                            foreach (var img in extractedImgs)
+                            {
+                                if (!comp.ImageList.Contains(img))
+                                {
+                                    comp.ImageList.Add(img);
+                                }
+                            }
+
+                            // 非 tabs 组件同样可能整篇都是 <details> 折叠块
+                            // （真实案例：「常见问题FAQ」17 个、「战斗系统」7 个）。
+                            // 以前 ParseDetailsTree 只在 tabs-component 分支里被调用，
+                            // 这些组件于是被压成扁平 Runs + 末尾堆一坨图片，
+                            // 折叠结构没了、图片也全跑到错误位置。
+                            if (comp.Tabs.Count == 0
+                                && comp.Content.IndexOf("<details", StringComparison.OrdinalIgnoreCase) >= 0)
+                            {
+                                var compSections = ParseDetailsTree(comp.Content);
+                                if (compSections != null && compSections.Count > 0)
+                                {
+                                    foreach (var s in compSections) comp.Sections.Add(s);
+                                    KuroLogger.Trace("WIKI_COMP_DETAILS title=" + comp.Title + " sections=" + compSections.Count);
+                                }
+                            }
+                        }
 
                                         mod.Components.Add(comp);
+                                        KuroLogger.Trace("WIKI_COMP_DONE type=" + comp.Type + " title=" + comp.Title
+                                                         + " tabs=" + (comp.Tabs != null ? comp.Tabs.Count : 0)
+                                                         + " runs=" + (comp.Runs != null ? comp.Runs.Count : 0));
                                     }
                                 }
 
@@ -1711,7 +1737,10 @@ namespace KuroBBS.Services
             if (string.IsNullOrWhiteSpace(html)) return string.Empty;
             try
             {
-                string text = html;
+                // 先剔除条件注释（<!--[if gte vml 1]>...<![endif]--> / <!--[if !vml]-->）。
+                // 里面的 <v:imagedata src="file:///..."> 会在「去掉标签」后把本地路径
+                // 当成正文残留在纯文本里。
+                string text = KuroHtmlPostParser.StripComments(html);
 
                 // Remove <summary> formatting
                 text = Regex.Replace(text, @"<summary[^>]*>(.*?)</summary>", "\n【$1】\n", RegexOptions.Singleline | RegexOptions.IgnoreCase);
@@ -1863,14 +1892,35 @@ namespace KuroBBS.Services
 
         private static List<WikiSectionItem> ParseDetailsTree(string html)
         {
+            return ParseDetailsTree(html, 0);
+        }
+
+        /// <summary>
+        /// 解析 &lt;details&gt; 折叠树。
+        /// **必须限制递归深度**：真实 Wiki 页面（如「萌新入门指南页」）存在
+        /// 很深的 &lt;details&gt; / kr-collapse-content 嵌套，无限递归会触发
+        /// StackOverflowException —— 该异常不可捕获、直接终止进程（表现为闪退且无日志）。
+        /// 超过 MaxDetailsDepth 后不再下钻，内容按纯文本整体处理。
+        /// </summary>
+        private const int MaxDetailsDepth = 6;
+
+        private static List<WikiSectionItem> ParseDetailsTree(string html, int depth)
+        {
             var list = new List<WikiSectionItem>();
             if (string.IsNullOrWhiteSpace(html) || !html.Contains("<details")) return list;
+            if (depth > MaxDetailsDepth) return list;
+
+            KuroLogger.Trace("WIKI_DETAILS depth=" + depth + " len=" + html.Length);
 
             try
             {
                 int searchIdx = 0;
-                while (searchIdx < html.Length)
+                int guard = 0;
+                while (searchIdx < html.Length && searchIdx >= 0)
                 {
+                    // 防御性上限：避免异常 HTML 造成死循环（每次迭代至少前进 1）
+                    if (++guard > 2000) break;
+
                     int startIdx = html.IndexOf("<details", searchIdx, StringComparison.OrdinalIgnoreCase);
                     if (startIdx < 0) break;
 
@@ -1878,10 +1928,22 @@ namespace KuroBBS.Services
                     if (tagEnd < 0) break;
 
                     string openTag = html.Substring(startIdx, tagEnd - startIdx + 1);
-                    bool isOpen = true; // Default to open so archive text & demo GIFs are immediately visible
+
+                    // 默认【折叠】。原先默认展开，是想让攻略正文和演示 GIF 一进来就能看到，
+                    // 但真实的「萌新入门指南页」里有 17+ 个 <details>（每个子话题一个，
+                    // 含 <table>），全部展开会一次性把上百张图塞进非虚拟化的 StackPanel，
+                    // 直接撑爆 WP8.1 内存（OOM 闪退）。
+                    // 折叠后：首屏只渲染 summary（纯文本），用户点开哪个才加载哪个。
+                    bool isOpen = false;
+
+                    // 尊重 HTML 里显式写死的 <details open>（真实页面确实存在，属作者本意）。
+                    if (Regex.IsMatch(openTag, @"\sopen(\s|>|=""|'')", RegexOptions.IgnoreCase))
+                    {
+                        isOpen = true;
+                    }
 
                     // Find matching </details> balancing nested <details>
-                    int depth = 1;
+                    int nesting = 1;
                     int cur = tagEnd + 1;
                     int closeIdx = -1;
                     while (cur < html.Length)
@@ -1893,13 +1955,13 @@ namespace KuroBBS.Services
 
                         if (nextOpen >= 0 && nextOpen < nextClose)
                         {
-                            depth++;
+                            nesting++;
                             cur = nextOpen + 8;
                         }
                         else
                         {
-                            depth--;
-                            if (depth == 0)
+                            nesting--;
+                            if (nesting == 0)
                             {
                                 closeIdx = nextClose;
                                 break;
@@ -1913,8 +1975,12 @@ namespace KuroBBS.Services
                         closeIdx = html.Length;
                     }
 
-                    string blockInner = html.Substring(tagEnd + 1, closeIdx - (tagEnd + 1));
+                    int innerStart = tagEnd + 1;
+                    int innerLen = closeIdx - innerStart;
+                    if (innerLen < 0) innerLen = 0;
+                    string blockInner = html.Substring(innerStart, innerLen);
                     searchIdx = closeIdx + 10;
+                    if (searchIdx <= startIdx) searchIdx = startIdx + 1; // 保证前进
 
                     // Extract summary
                     string title = "";
@@ -1940,13 +2006,18 @@ namespace KuroBBS.Services
                         bodyHtml = blockInner.Substring(sumMatch.Index + sumMatch.Length);
                     }
 
-                    // Check for nested children
+                    // Check for nested children (受 MaxDetailsDepth 限制，防止栈溢出)
                     var children = new List<WikiSectionItem>();
                     string directHtml = bodyHtml;
-                    if (bodyHtml.Contains("<details"))
+                    if (depth < MaxDetailsDepth && bodyHtml.Contains("<details"))
                     {
-                        children = ParseDetailsTree(bodyHtml);
-                        directHtml = Regex.Replace(bodyHtml, @"<details[^>]*>.*?</details>", "", RegexOptions.Singleline | RegexOptions.IgnoreCase);
+                        children = ParseDetailsTree(bodyHtml, depth + 1);
+                        directHtml = StripDetailsBlocks(bodyHtml);
+                    }
+                    else if (bodyHtml.Contains("<details"))
+                    {
+                        // 已达深度上限：剥掉内层 details 标签但保留其文本，避免再次下钻
+                        directHtml = StripDetailsBlocks(bodyHtml);
                     }
 
                     // Extract image
@@ -1963,6 +2034,9 @@ namespace KuroBBS.Services
                         IsExpanded = isOpen
                     };
 
+                    // 有序内容块：文字 / 图片按正文顺序交错，保证「图片在对应位置」。
+                    item.Blocks = KuroHtmlPostParser.ParseHtml(directHtml);
+
                     if (children.Count > 0)
                     {
                         item.Children = children;
@@ -1974,6 +2048,72 @@ namespace KuroBBS.Services
             catch { }
 
             return list;
+        }
+
+        /// <summary>
+        /// 去掉 &lt;details&gt;...&lt;/details&gt; 外壳但保留内部文本/HTML。
+        /// 用「扫描配对」而非正则惰性匹配：正则 <c>&lt;details[^&gt;]*&gt;.*?&lt;/details&gt;</c>
+        /// 在 27 万字符的大 HTML 上会出现灾难性回溯，且对嵌套 &lt;details&gt; 匹配错误。
+        /// </summary>
+        private static string StripDetailsBlocks(string html)
+        {
+            if (string.IsNullOrEmpty(html) || !html.Contains("<details")) return html;
+
+            try
+            {
+                var sb = new System.Text.StringBuilder(html.Length);
+                int i = 0;
+                while (i < html.Length)
+                {
+                    int open = html.IndexOf("<details", i, StringComparison.OrdinalIgnoreCase);
+                    if (open < 0)
+                    {
+                        sb.Append(html, i, html.Length - i);
+                        break;
+                    }
+                    // 原样保留 open 之前的文本
+                    sb.Append(html, i, open - i);
+
+                    int tagEnd = html.IndexOf('>', open);
+                    if (tagEnd < 0) break;
+
+                    // 找配对的 </details>（处理嵌套）
+                    int nesting = 1;
+                    int cur = tagEnd + 1;
+                    int closeIdx = -1;
+                    while (cur < html.Length)
+                    {
+                        int nextOpen = html.IndexOf("<details", cur, StringComparison.OrdinalIgnoreCase);
+                        int nextClose = html.IndexOf("</details>", cur, StringComparison.OrdinalIgnoreCase);
+                        if (nextClose < 0) break;
+                        if (nextOpen >= 0 && nextOpen < nextClose)
+                        {
+                            nesting++;
+                            cur = nextOpen + 8;
+                        }
+                        else
+                        {
+                            nesting--;
+                            if (nesting == 0) { closeIdx = nextClose; break; }
+                            cur = nextClose + 10;
+                        }
+                    }
+
+                    if (closeIdx < 0) break;
+
+                    // 保留外壳内部的 HTML（即去掉 <details ...> 与 </details> 两个标签本身）
+                    int innerStart = tagEnd + 1;
+                    int innerLen = closeIdx - innerStart;
+                    if (innerLen > 0) sb.Append(html, innerStart, innerLen);
+
+                    i = closeIdx + 10;
+                }
+                return sb.ToString();
+            }
+            catch
+            {
+                return html;
+            }
         }
 
         private static List<WikiRotationLine> ParseRotationFlow(string html, string tabTitle)

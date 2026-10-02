@@ -136,6 +136,11 @@ namespace KuroBBS
                 {
                     ResetImageViewerScale();
                 }
+                else if (args.PropertyName == "SelectedImageUrl" && ViewModel.IsImageViewerOpen)
+                {
+                    // 预览条切换主图：重新归位缩放并重新播放 GIF
+                    ResetImageViewerScale();
+                }
             };
 
             if (ViewModel.Post != null && ((ViewModel.Post.ContentBlocks != null && ViewModel.Post.ContentBlocks.Count > 0) || !string.IsNullOrEmpty(ViewModel.Post.FullContent)))
@@ -512,13 +517,36 @@ namespace KuroBBS
             string url = element != null ? element.Tag as string : null;
             if (!string.IsNullOrEmpty(url) && ViewModel != null)
             {
-                ViewModel.OpenImageCommand.Execute(url);
+                // 正文图片：把整篇正文的图片作为预览条数据源
+                ViewModel.OpenImageWithSiblings(url, GetBodyImages());
             }
+        }
+
+        /// <summary>收集当前正文里所有图片块，供查看器底部预览条使用。</summary>
+        private System.Collections.Generic.List<PostImage> GetBodyImages()
+        {
+            var list = new System.Collections.Generic.List<PostImage>();
+            var post = ViewModel != null ? ViewModel.Post : null;
+            if (post == null || post.ContentBlocks == null) return list;
+
+            foreach (var block in post.ContentBlocks)
+            {
+                if (block != null && (block.IsImage || block.IsBanner) && !string.IsNullOrEmpty(block.ImageUrl))
+                {
+                    list.Add(new PostImage
+                    {
+                        Url = block.ImageUrl,
+                        Width = block.ImageWidth,
+                        Height = block.ImageHeight
+                    });
+                }
+            }
+            return list;
         }
 
         /// <summary>
         /// 评论区图片点击：Tag 绑定的是 PostImage（含 Url/Width/Height）。
-        /// 复用与正文图片相同的全屏图片查看器。
+        /// 复用与正文图片相同的全屏图片查看器，并把同一楼层的图片作为预览条数据源。
         /// </summary>
         private void OnCommentImageTapped(object sender, TappedRoutedEventArgs e)
         {
@@ -526,21 +554,50 @@ namespace KuroBBS
             if (element == null || ViewModel == null) return;
 
             string url = null;
+            PostImage tapped = null;
 
-            var img = element.Tag as KuroBBS.Models.PostImage;
-            if (img != null)
+            tapped = element.Tag as PostImage;
+            if (tapped != null)
             {
-                url = img.Url;
+                url = tapped.Url;
             }
             else if (element.Tag is string)
             {
                 url = element.Tag as string;
             }
 
-            if (!string.IsNullOrEmpty(url))
+            if (string.IsNullOrEmpty(url)) return;
+
+            // 同一楼层的图片集合 → 底部预览条
+            var siblings = FindSiblingImages(element);
+            ViewModel.OpenImageWithSiblings(url, siblings);
+            e.Handled = true;
+        }
+
+        /// <summary>
+        /// 从被点的元素往上找 DataContext，取出其所在评论/回复的 ImageList。
+        /// 找不到就返回 null（查看器退化为单张模式）。
+        /// </summary>
+        private System.Collections.Generic.IEnumerable<PostImage> FindSiblingImages(FrameworkElement element)
+        {
+            var node = element as DependencyObject;
+            while (node != null)
             {
-                ViewModel.OpenImageCommand.Execute(url);
+                var comment = (node as FrameworkElement) != null ? (node as FrameworkElement).DataContext as PostCommentItem : null;
+                if (comment != null && comment.ImageList != null && comment.ImageList.Count > 0)
+                {
+                    return comment.ImageList;
+                }
+
+                var reply = (node as FrameworkElement) != null ? (node as FrameworkElement).DataContext as PostReplyItem : null;
+                if (reply != null && reply.ImageList != null && reply.ImageList.Count > 0)
+                {
+                    return reply.ImageList;
+                }
+
+                node = VisualTreeHelper.GetParent(node);
             }
+            return null;
         }
 
         private void OnAuthorHeaderTapped(object sender, TappedRoutedEventArgs e)
@@ -780,8 +837,10 @@ namespace KuroBBS
 
             if (isBanner)
             {
-                border.MaxHeight = 44;
-                decodeWidth = 480;
+                // 装饰横幅：保持扁平但不至于只剩一条缝。
+                // 旧的 44px 太狠，一旦正文图被误判成 banner 就会「显示不全」。
+                border.MaxHeight = 90;
+                decodeWidth = 640;
             }
             else if (imgWidth > 0 && imgHeight > 0)
             {
@@ -803,9 +862,10 @@ namespace KuroBBS
 
             var grid = new Grid();
 
+            Border skeleton = null;
             if (!isBanner)
             {
-                var skeleton = new Border
+                skeleton = new Border
                 {
                     Background = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 34, 34, 44)),
                     MinHeight = border.MinHeight
@@ -838,6 +898,11 @@ namespace KuroBBS
                 grid.Children.Add(skeleton);
             }
 
+            // 【关键】图片就绪后必须把"正在载入图片..."骨架层从布局中移除。
+            // 之前骨架层只加不删，即使图片已经加载出来，ProgressBar 仍叠在上面
+            // （用户反馈："图加载出来了但是进度条不消失"）。
+            var skeletonToRemove = skeleton;
+
             var bitmapSource = KuroImageCache.Instance.GetImageSource(url, decodeWidth, decodeHeight);
 
             // If the rendered height exceeds safe composition surface limit (1400 DIPs), slice seamlessly into multiple stacked clipping containers
@@ -868,6 +933,14 @@ namespace KuroBBS
                     sliceStack.Children.Add(sliceContainer);
                 }
                 grid.Children.Add(sliceStack);
+
+                // 分片长图：首片打开即移除骨架层。
+                if (sliceStack.Children.Count > 0)
+                {
+                    var firstSlice = sliceStack.Children[0] as Grid;
+                    var firstImg = firstSlice != null && firstSlice.Children.Count > 0 ? firstSlice.Children[0] as Image : null;
+                    RemoveSkeletonWhenImageReady(firstImg, skeletonToRemove, grid);
+                }
             }
             else
             {
@@ -880,6 +953,9 @@ namespace KuroBBS
                 img.Source = bitmapSource;
                 grid.Children.Add(img);
 
+                // 图片真正打开后移除骨架层；失败时也移除，避免进度条永远转下去。
+                RemoveSkeletonWhenImageReady(img, skeletonToRemove, grid);
+
                 // Automatically play animated GIFs with safe decoding and lifecycle management
                 KuroGifHelper.SetGifSource(img, url);
             }
@@ -888,6 +964,68 @@ namespace KuroBBS
             border.Tapped += OnImageItemTapped;
 
             return border;
+        }
+
+        /// <summary>
+        /// 当 Image 成功打开（或失败）后，把"正在载入图片..."骨架层从容器里移除。
+        /// <para>
+        /// 旧逻辑：骨架层只 <c>grid.Children.Add(skeleton)</c> 从不移除，
+        /// 于是图片明明已加载完成，ProgressBar + 文字仍叠在上层不消失。
+        /// </para>
+        /// <para>
+        /// 注意：BitmapImage 是异步解码的，<c>ImageOpened</c> 可能在本方法返回之后才触发，
+        /// 所以这里用事件回调而不是"立即移除"。
+        /// </para>
+        /// </summary>
+        private static void RemoveSkeletonWhenImageReady(Image img, Border skeleton, Panel container)
+        {
+            if (img == null || skeleton == null || container == null) return;
+
+            // 双保险：可能只有一个会触发，用 one-shot 标记避免重复移除。
+            bool removed = false;
+            RoutedEventHandler remove = null;
+            ExceptionRoutedEventHandler removeOnFail = null;
+
+            remove = (s, e) =>
+            {
+                if (removed) return;
+                removed = true;
+                try { container.Children.Remove(skeleton); } catch { }
+                DetachImageLoadHandlers(img, remove, removeOnFail);
+            };
+            removeOnFail = (s, e) =>
+            {
+                if (removed) return;
+                removed = true;
+                try { container.Children.Remove(skeleton); } catch { }
+                DetachImageLoadHandlers(img, remove, removeOnFail);
+            };
+
+            img.ImageOpened += remove;
+            img.ImageFailed += removeOnFail;
+
+            // 若图片同步命中内存缓存、且已在可视树中，ImageOpened 可能已经错过 —— 兜底检查一次。
+            try
+            {
+                var bmp = img.Source as BitmapSource;
+                if (bmp != null && bmp.PixelWidth > 0)
+                {
+                    if (!removed)
+                    {
+                        removed = true;
+                        container.Children.Remove(skeleton);
+                        DetachImageLoadHandlers(img, remove, removeOnFail);
+                    }
+                }
+            }
+            catch { }
+        }
+
+        private static void DetachImageLoadHandlers(Image img, RoutedEventHandler onOpened, ExceptionRoutedEventHandler onFailed)
+        {
+            if (img == null) return;
+            try { if (onOpened != null) img.ImageOpened -= onOpened; } catch { }
+            try { if (onFailed != null) img.ImageFailed -= onFailed; } catch { }
         }
 
         private DispatcherTimer _toastTimer;
@@ -899,11 +1037,20 @@ namespace KuroBBS
                 double screenW = Window.Current.Bounds.Width;
                 double screenH = Window.Current.Bounds.Height;
 
+                // 底部 9:1 预览条会占掉一条 86px 高的窄带，主图区高度必须减掉它，
+                // 否则长图会被遮住一截、缩放中心也会算错。
+                double stripH = 0;
+                if (ViewerPreviewStrip != null && ViewerPreviewStrip.Visibility == Visibility.Visible)
+                {
+                    stripH = ViewerPreviewStrip.ActualHeight > 0 ? ViewerPreviewStrip.ActualHeight : 86;
+                }
+                double contentH = Math.Max(120, screenH - stripH);
+
                 var bmp = ViewerImage.Source as BitmapSource;
                 if (bmp != null && bmp.PixelWidth > 0 && bmp.PixelHeight > 0)
                 {
                     double aspect = (double)bmp.PixelHeight / bmp.PixelWidth;
-                    if (aspect > (screenH / screenW))
+                    if (aspect > (contentH / screenW))
                     {
                         // Long image: expand height to natural aspect ratio and align to top so entire image scrolls smoothly
                         ImageViewerContainer.Width = screenW;
@@ -917,7 +1064,7 @@ namespace KuroBBS
                 }
 
                 ImageViewerContainer.Width = screenW;
-                ImageViewerContainer.Height = screenH;
+                ImageViewerContainer.Height = contentH;
                 ImageViewerContainer.HorizontalAlignment = HorizontalAlignment.Center;
                 ImageViewerContainer.VerticalAlignment = VerticalAlignment.Center;
                 ViewerImage.Stretch = Stretch.Uniform;
@@ -927,10 +1074,18 @@ namespace KuroBBS
 
         private void ResetImageViewerScale()
         {
+            if (ViewerLoadingBar != null) ViewerLoadingBar.Visibility = Visibility.Visible;
             UpdateImageViewerContainerSize();
             if (ImageViewerScrollViewer != null)
             {
                 ImageViewerScrollViewer.ChangeView(0, 0, 1.0f, true);
+            }
+
+            // 预览条把当前图滚动到可见位置，切换主图时不会「跑丢」
+            if (ViewerThumbList != null && ViewModel != null && ViewModel.SelectedViewerIndex >= 0)
+            {
+                try { ViewerThumbList.ScrollIntoView(ViewModel.ViewerImages[ViewModel.SelectedViewerIndex]); }
+                catch { }
             }
 
             if (ViewerImage != null && ViewModel != null && !string.IsNullOrEmpty(ViewModel.SelectedImageUrl))
@@ -946,6 +1101,7 @@ namespace KuroBBS
 
         private void OnViewerImageOpened(object sender, RoutedEventArgs e)
         {
+            if (ViewerLoadingBar != null) ViewerLoadingBar.Visibility = Visibility.Collapsed;
             ResetImageViewerScale();
         }
 

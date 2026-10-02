@@ -463,20 +463,49 @@
                             </StackPanel>
                         </Border>
 
-                        <!-- Gold Balance Tile -->
-                        <Border Background="{StaticResource MetroCardBackgroundBrush}" Padding="16" BorderBrush="{StaticResource MetroGoldBrush}" BorderThickness="1" Margin="0,0,0,12">
+                        <!-- 库洛币余额：点击进入金币商店 -->
+                        <Button Background="{StaticResource MetroCardBackgroundBrush}" Padding="16"
+                                BorderBrush="{StaticResource MetroGoldBrush}" BorderThickness="1" Margin="0,0,0,10"
+                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                                Click="OnGoToGoldShopClick">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Grid.Column="0">
                                     <TextBlock Text="库洛金币 / 库洛币余额" FontSize="11" Foreground="{StaticResource MetroSubTextBrush}" />
                                     <TextBlock Text="{Binding Profile.GoldCount}" FontSize="24" FontWeight="Bold" Foreground="{StaticResource MetroGoldBrush}" />
                                 </StackPanel>
-                                <TextBlock Grid.Column="1" Text="🪙" FontSize="28" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="1" Text="金币商店" FontSize="12" Foreground="{StaticResource MetroSubTextBrush}"
+                                           VerticalAlignment="Center" Margin="0,0,6,0" />
+                                <TextBlock Grid.Column="2" Text="&#xE0E3;" FontFamily="Segoe UI Symbol" FontSize="14"
+                                           Foreground="{StaticResource MetroSubTextBrush}" VerticalAlignment="Center" />
                             </Grid>
-                        </Border>
+                        </Button>
+
+                        <!-- 任务中心入口 -->
+                        <Button Background="{StaticResource MetroCardBackgroundBrush}" Padding="14,12"
+                                BorderBrush="#2C2C34" BorderThickness="1" Margin="0,0,0,12"
+                                HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                                Click="OnGoToTaskCenterClick">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="&#xE0B6;" FontFamily="Segoe UI Symbol" FontSize="18"
+                                           Foreground="{StaticResource MetroAccentBrush}" VerticalAlignment="Center" Margin="0,0,12,0" />
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                    <TextBlock Text="任务中心" FontSize="14" FontWeight="SemiBold" Foreground="White" />
+                                    <TextBlock Text="做任务赚库洛币 · 查看金币明细" FontSize="11" Foreground="{StaticResource MetroSubTextBrush}" />
+                                </StackPanel>
+                                <TextBlock Grid.Column="2" Text="&#xE0E3;" FontFamily="Segoe UI Symbol" FontSize="14"
+                                           Foreground="{StaticResource MetroSubTextBrush}" VerticalAlignment="Center" />
+                            </Grid>
+                        </Button>
 
                         <!-- Month Reward Supply Calendar -->
                         <TextBlock Text="本月物资奖励日历" FontSize="14" FontWeight="Bold" Foreground="White" Margin="0,4,0,8" />

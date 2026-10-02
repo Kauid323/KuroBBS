@@ -21,6 +21,13 @@ namespace KuroBBS
             this.NavigationCacheMode = NavigationCacheMode.Required;
             ViewModel = new WikiItemListViewModel();
             this.DataContext = ViewModel;
+            SizeChanged += WikiItemListPage_SizeChanged;
+        }
+
+        private void WikiItemListPage_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            // 减掉 GridView 的 Padding（左右各 12）
+            ViewModel.UpdateLayoutWidth(e.NewSize.Width - 24);
         }
 
         protected override async void OnNavigatedTo(NavigationEventArgs e)

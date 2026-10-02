@@ -49,9 +49,18 @@ namespace KuroBBS.Helpers
                 if (runs == null) return;
 
                 var paragraph = new Paragraph();
+                int emitted = 0;
+
+                // 【防御】单个 RichTextBlock 的 Inline 数量上限。
+                // 某些 Wiki 条目的富文本会产出上千个 Run/LineBreak/InlineUIContainer，
+                // WP8.1 的文本布局在极端 Inline 数下会异常耗时（表现为卡死/闪退）。
+                // 超过上限后停止追加，保证页面可用且不崩。
+                const int MaxInlines = 4000;
+
                 foreach (var run in runs)
                 {
                     if (run == null) continue;
+                    if (emitted >= MaxInlines) break;
 
                     if (run.IsEmoji)
                     {
@@ -78,6 +87,7 @@ namespace KuroBBS.Helpers
                                 img.Source = KuroImageCache.Instance.GetImageSource(emojiUrl);
                                 container.Child = img;
                                 paragraph.Inlines.Add(container);
+                                emitted++;
                                 continue;
                             }
                             catch
@@ -93,12 +103,15 @@ namespace KuroBBS.Helpers
                         string[] lines = normalized.Split('\n');
                         for (int i = 0; i < lines.Length; i++)
                         {
+                            if (emitted >= MaxInlines) break;
                             if (i > 0)
                             {
                                 paragraph.Inlines.Add(new LineBreak());
+                                emitted++;
                             }
                             if (!string.IsNullOrEmpty(lines[i]))
                             {
+                                if (emitted >= MaxInlines) break;
                                 var r = new Run { Text = lines[i] };
                                 if (run.IsBold)
                                 {
@@ -121,6 +134,7 @@ namespace KuroBBS.Helpers
                                     }
                                 }
                                 paragraph.Inlines.Add(r);
+                                emitted++;
                             }
                         }
                     }

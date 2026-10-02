@@ -224,9 +224,12 @@ namespace KuroBBS.ViewModels
             IsBusy = true;
             CloseImage();
             ViewerImages.Clear();
+            KuroLogger.Trace("WIKI_DETAIL_BEGIN id=" + entryId);
             try
             {
                 var detail = await KuroWikiService.Instance.GetEntryDetailAsync(wikiType, entryId, forceRefresh);
+                KuroLogger.Trace("WIKI_DETAIL_FETCHED modules=" + (detail != null && detail.Modules != null ? detail.Modules.Count : -1)
+                                 + " comps=" + CountComponents(detail));
                 Detail = detail;
                 Modules.Clear();
                 if (detail != null && detail.Modules != null)
@@ -238,10 +241,12 @@ namespace KuroBBS.ViewModels
                     for (int i = 0; i < detail.Modules.Count; i++)
                     {
                         Modules.Add(detail.Modules[i]);
+                        KuroLogger.Trace("WIKI_DETAIL_ADD_MODULE " + i);
                         await YieldToUiAsync();
                     }
                 }
 
+                KuroLogger.Trace("WIKI_DETAIL_MODULES_ADDED");
                 Contributors.Clear();
                 if (detail != null && detail.Contributors != null)
                 {
@@ -250,6 +255,7 @@ namespace KuroBBS.ViewModels
                         Contributors.Add(c);
                     }
                 }
+                KuroLogger.Trace("WIKI_DETAIL_DONE contributors=" + Contributors.Count);
             }
             catch (Exception ex)
             {
@@ -260,6 +266,17 @@ namespace KuroBBS.ViewModels
             {
                 IsBusy = false;
             }
+        }
+
+        private static int CountComponents(WikiEntryDetail detail)
+        {
+            if (detail == null || detail.Modules == null) return -1;
+            int n = 0;
+            foreach (var m in detail.Modules)
+            {
+                if (m != null && m.Components != null) n += m.Components.Count;
+            }
+            return n;
         }
 
         /// <summary>

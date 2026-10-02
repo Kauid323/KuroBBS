@@ -40,8 +40,8 @@
                 <Border Background="{StaticResource PagePanelBrush}" BorderBrush="#D5E3EC" BorderThickness="1" Padding="14" Margin="0,0,0,14">
                     <StackPanel>
                         <TextBlock Text="每行显示数量" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource PageTextBrush}" />
-                        <TextBlock Text="调整全部角色页面的卡片列数，设置会自动保存。" FontSize="11" Foreground="{StaticResource PageMutedBrush}" TextWrapping="Wrap" Margin="0,5,0,10" />
-                        <ComboBox ItemsSource="{Binding ColumnOptions}" SelectedItem="{Binding AllRoleColumns, Mode=TwoWay}" HorizontalAlignment="Stretch" Background="#F4F8FB" Foreground="{StaticResource PageTextBrush}" BorderBrush="#A9C6D8">
+                        <TextBlock Text="调整全部角色、图鉴与意识手册列表、金币商店的卡片列数，设置会自动保存。" FontSize="11" Foreground="{StaticResource PageMutedBrush}" TextWrapping="Wrap" Margin="0,5,0,10" />
+                        <ComboBox ItemsSource="{Binding ColumnOptions}" SelectedItem="{Binding GridColumns, Mode=TwoWay}" HorizontalAlignment="Stretch" Background="#F4F8FB" Foreground="{StaticResource PageTextBrush}" BorderBrush="#A9C6D8">
                             <ComboBox.ItemTemplate>
                                 <DataTemplate>
                                     <TextBlock Text="{Binding}" FontSize="14" Foreground="{StaticResource PageTextBrush}" />

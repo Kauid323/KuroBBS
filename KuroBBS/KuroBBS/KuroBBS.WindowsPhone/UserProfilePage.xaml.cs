@@ -189,6 +189,14 @@ namespace KuroBBS
             }
         }
 
+        private void OnFollowingTapped(object sender, TappedRoutedEventArgs e)
+        {
+            if (ViewModel != null && ViewModel.Profile != null && !string.IsNullOrEmpty(ViewModel.Profile.UserId))
+            {
+                this.Frame.Navigate(typeof(FollowListPage), ViewModel.Profile.UserId);
+            }
+        }
+
         private void OnAvatarTapped(object sender, TappedRoutedEventArgs e)
         {
             if (ViewModel != null && ViewModel.Profile != null && !string.IsNullOrEmpty(ViewModel.Profile.AvatarUrl))

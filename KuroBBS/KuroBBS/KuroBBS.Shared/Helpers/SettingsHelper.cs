@@ -63,6 +63,16 @@ namespace KuroBBS.Helpers
             set { SetValue(KeyAllRoleColumns, value >= 2 && value <= 5 ? value : 3); }
         }
 
+        /// <summary>
+        /// 「每行显示数量」——全局列数，作用范围：全部角色 / 图鉴列表（含意识手册）/
+        /// 金币商店。与 AllRoleColumns 共用同一个存储 key，老用户已保存的值不会丢。
+        /// </summary>
+        public static int GridColumns
+        {
+            get { return AllRoleColumns; }
+            set { AllRoleColumns = value; }
+        }
+
         public static bool IsLoggedIn
         {
             get { return !string.IsNullOrEmpty(Token); }

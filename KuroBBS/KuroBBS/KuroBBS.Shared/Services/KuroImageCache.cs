@@ -35,7 +35,14 @@ namespace KuroBBS.Services
 
         private readonly Dictionary<string, BitmapImage> _memoryCache;
         private readonly LinkedList<string> _lruKeys;
-        private const int MaxMemoryCacheItems = 45;
+        /// <summary>
+        /// 内存缓存条目上限。
+        /// 注意：每个条目都是**已解码的位图**（480px 宽的长图可达 1~3MB）。
+        /// 配合 KuroLazyImage 的「视口加载 + 离屏回收」，同时存活的图片本就不多，
+        /// 缓存 45 张纯属浪费（最坏 ~100MB 常驻）。降到 16 足够覆盖回滚/相邻预取，
+        /// 又能显著压低常驻内存，避免 WP8.1 OOM。
+        /// </summary>
+        private const int MaxMemoryCacheItems = 16;
         private readonly HashSet<string> _diskFileCache;
         private readonly HashSet<string> _inFlightUrls;
         private readonly object _lock = new object();
@@ -176,7 +183,22 @@ namespace KuroBBS.Services
         /// <param name="decodeWidth">解码宽度上限</param>
         public async Task LoadIntoAsync(Image image, string url, int decodeWidth = 360, int decodeHeight = 0)
         {
+            await LoadIntoAsync(image, image != null ? image.Dispatcher : null, url, decodeWidth, decodeHeight);
+        }
+
+        /// <summary>
+        /// 重载：由调用方**在 UI 线程上预先捕获** dispatcher 后传入。
+        /// 当调用点本身就在后台线程（如 Task.Run 里）时，必须用这个重载，
+        /// 否则内部读取 image.Dispatcher 仍会 RPC_E_WRONG_THREAD。
+        /// </summary>
+        public async Task LoadIntoAsync(Image image, CoreDispatcher dispatcher, string url, int decodeWidth = 360, int decodeHeight = 0)
+        {
             if (string.IsNullOrWhiteSpace(url)) return;
+
+            // 【关键】dispatcher 由调用方在 UI 线程上取出后传入。
+            // 之前是在后台线程里访问 image.Dispatcher，属于跨线程触碰 UI 对象，
+            // 会抛 RPC_E_WRONG_THREAD (0x8001010E) —— 用户日志里的 LAZY_IMG_ERR 就是它。
+            // 拿到之后，后续所有 await 都只用这个局部变量，绝不再碰 image 的 UI 成员。
 
             string cacheKey = string.Format("{0}_w{1}_h{2}", url, decodeWidth, decodeHeight);
 
@@ -192,7 +214,7 @@ namespace KuroBBS.Services
             }
             if (cached != null)
             {
-                await SetSourceOnUiThreadAsync(image, cached);
+                await SetSourceOnUiThreadAsync(image, dispatcher, cached);
                 return;
             }
 
@@ -203,11 +225,11 @@ namespace KuroBBS.Services
 
             if (isCachedOnDisk)
             {
-                var bmp = CreateEmptyBitmap(decodeWidth, decodeHeight);
-                try { bmp.UriSource = new Uri("ms-appdata:///local/ImageCache/" + fileName); }
-                catch { }
-                PutInMemoryCache(cacheKey, bmp);
-                await SetSourceOnUiThreadAsync(image, bmp);
+                // 【关键】BitmapImage 是 DependencyObject，只能在 UI 线程创建/配置。
+                // 之前在这里直接 new BitmapImage() 会因为当前在后台线程而抛 RPC_E_WRONG_THREAD。
+                await SetUriSourceOnUiThreadAsync(
+                    image, dispatcher, "ms-appdata:///local/ImageCache/" + fileName,
+                    decodeWidth, decodeHeight, cacheKey, url);
                 return;
             }
 
@@ -215,11 +237,9 @@ namespace KuroBBS.Services
             await _initTcs.Task;
             if (_cacheFolder == null)
             {
-                // 缓存目录不可用时降级：直接在 UI 线程挂远程 URI，保证图片仍可见
-                var fallback = CreateEmptyBitmap(decodeWidth, decodeHeight);
-                try { fallback.UriSource = new Uri(url); } catch { }
-                PutInMemoryCache(cacheKey, fallback);
-                await SetSourceOnUiThreadAsync(image, fallback);
+                // 缓存目录不可用时降级：直接挂远程 URI，保证图片仍可见
+                await SetUriSourceOnUiThreadAsync(
+                    image, dispatcher, url, decodeWidth, decodeHeight, cacheKey, url);
                 return;
             }
 
@@ -233,7 +253,7 @@ namespace KuroBBS.Services
                 }
                 if (cached != null)
                 {
-                    await SetSourceOnUiThreadAsync(image, cached);
+                    await SetSourceOnUiThreadAsync(image, dispatcher, cached);
                     return;
                 }
 
@@ -242,22 +262,20 @@ namespace KuroBBS.Services
 
                 var buffer = await response.Content.ReadAsBufferAsync();
 
+                string localUri = null;
                 try
                 {
                     var file = await _cacheFolder.CreateFileAsync(fileName, CreationCollisionOption.ReplaceExisting);
                     await FileIO.WriteBufferAsync(file, buffer);
                     lock (_lock) { _diskFileCache.Add(fileName); }
+                    localUri = "ms-appdata:///local/ImageCache/" + fileName;
                 }
                 catch { }
 
-                var bitmap = CreateEmptyBitmap(decodeWidth, decodeHeight);
-                try { bitmap.UriSource = new Uri("ms-appdata:///local/ImageCache/" + fileName); }
-                catch
-                {
-                    try { bitmap.UriSource = new Uri(url); } catch { }
-                }
-                PutInMemoryCache(cacheKey, bitmap);
-                await SetSourceOnUiThreadAsync(image, bitmap);
+                // 后台只做下载/写盘；BitmapImage 的创建与绑定一律回 UI 线程完成
+                await SetUriSourceOnUiThreadAsync(
+                    image, dispatcher, localUri != null ? localUri : url,
+                    decodeWidth, decodeHeight, cacheKey, url);
             }
             catch (Exception ex)
             {
@@ -267,6 +285,64 @@ namespace KuroBBS.Services
             {
                 _decodeThrottle.Release();
             }
+        }
+
+        /// <summary>
+        /// 在 UI 线程创建 BitmapImage、设置解码尺寸与 UriSource，并回填到 image.Source。
+        /// </summary>
+        /// <remarks>
+        /// **BitmapImage 的创建与配置必须在 UI 线程执行**（它是 DependencyObject）：
+        /// 在后台线程 new / 设 DecodePixel* / 设 UriSource 都会抛
+        /// RPC_E_WRONG_THREAD (0x8001010E)——这正是之前 LAZY_IMG_ERR 的根因。
+        /// WinRT 的 BitmapImage 在 UriSource 赋值后本身异步解码，
+        /// 因此不需要（也不能）把「创建 BitmapImage」挪到后台线程。
+        /// 本方法内部把「创建 bitmap」整个放进 UI 线程回调里完成。
+        /// </remarks>
+        private async Task SetUriSourceOnUiThreadAsync(
+            Image image, CoreDispatcher dispatcher, string uriSource,
+            int decodeWidth, int decodeHeight, string cacheKey, string originalUrl)
+        {
+            if (string.IsNullOrWhiteSpace(uriSource)) return;
+
+            // 创建 bitmap 的动作整体封成闭包，只在 UI 线程执行。
+            // 注意：RunAsync 需要 DispatchedHandler，所以这里用方法组/局部函数形式而非 Action。
+            DispatchedHandler apply = () =>
+            {
+                BitmapImage bitmap;
+                try
+                {
+                    bitmap = CreateEmptyBitmap(decodeWidth, decodeHeight);
+                    try { bitmap.UriSource = new Uri(uriSource); }
+                    catch
+                    {
+                        try { bitmap.UriSource = new Uri(originalUrl); } catch { }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    KuroLogger.Warn("IMG_URI_ERR", "Create bitmap failed: " + ex.Message);
+                    return;
+                }
+
+                PutInMemoryCache(cacheKey, bitmap);
+
+                if (image == null) return;
+                try { image.Source = bitmap; } catch { }
+            };
+
+            if (dispatcher == null)
+            {
+                // 没有 dispatcher：只预热缓存，不碰 UI 对象
+                apply();
+                return;
+            }
+
+            if (dispatcher.HasThreadAccess)
+            {
+                apply();
+                return;
+            }
+            await dispatcher.RunAsync(CoreDispatcherPriority.Low, apply);
         }
 
         private static BitmapImage CreateEmptyBitmap(int decodeWidth, int decodeHeight)
@@ -285,14 +361,19 @@ namespace KuroBBS.Services
             return bitmap;
         }
 
-        private static async Task SetSourceOnUiThreadAsync(Image image, BitmapImage bitmap)
+        /// <summary>
+        /// 在 UI 线程把 Source 回填到 image。
+        /// **dispatcher 必须由调用方在 UI 线程上预先取出**（见 LoadIntoAsync 开头）——
+        /// 绝不能在后台线程里访问 image.Dispatcher，否则 RPC_E_WRONG_THREAD。
+        /// </summary>
+        private static async Task SetSourceOnUiThreadAsync(Image image, CoreDispatcher dispatcher, BitmapImage bitmap)
         {
             if (image == null || bitmap == null) return;
-            var dispatcher = image.Dispatcher;
             if (dispatcher == null) return;
+
             if (dispatcher.HasThreadAccess)
             {
-                image.Source = bitmap;
+                try { image.Source = bitmap; } catch { }
                 return;
             }
             await dispatcher.RunAsync(CoreDispatcherPriority.Low, () =>

@@ -7,6 +7,7 @@ using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using Windows.UI;
 using Windows.UI.Xaml.Media;
+using KuroBBS.Helpers;
 using KuroBBS.Models;
 using KuroBBS.Services;
 
@@ -100,11 +101,54 @@ namespace KuroBBS.ViewModels
             set { _hasTags = value; OnPropertyChanged(); }
         }
 
+        /// <summary>每行列数，来自设置（图鉴 / 意识手册列表也走它）。</summary>
+        public int GridColumns { get; private set; }
+
+        private double _itemWidth;
+        public double ItemWidth
+        {
+            get { return _itemWidth; }
+            set { _itemWidth = value; OnPropertyChanged(); }
+        }
+
+        private double _itemHeight;
+        public double ItemHeight
+        {
+            get { return _itemHeight; }
+            set { _itemHeight = value; OnPropertyChanged(); }
+        }
+
         public WikiItemListViewModel()
         {
             AllItems = new List<WikiItemRecord>();
             FilteredItems = new ObservableCollection<WikiItemRecord>();
             TagGroups = new ObservableCollection<WikiTagGroupViewModel>();
+
+            GridColumns = SettingsHelper.GridColumns;
+            // 图鉴卡片宽高比 ≈ 0.75（图 100 + 底栏 ~46），与旧 ItemWidth=116/ItemHeight=152 接近
+            const double aspect = 152.0 / 116.0;
+            try
+            {
+                var bounds = Windows.UI.Xaml.Window.Current.Bounds;
+                double w = bounds.Width > 0 ? bounds.Width - 24 : 0;
+                UpdateLayoutWidth(w, aspect);
+            }
+            catch
+            {
+                UpdateLayoutWidth(432, aspect); // 兜底：480 宽减 Padding
+            }
+        }
+
+        /// <summary>页面 SizeChanged 时重算单元格宽高，保证按设置列数自适应。</summary>
+        public void UpdateLayoutWidth(double availableWidth, double aspect = 152.0 / 116.0)
+        {
+            if (availableWidth <= 0) return;
+            GridColumns = SettingsHelper.GridColumns;
+            OnPropertyChanged("GridColumns");
+
+            double w = GridLayoutHelper.CalcItemWidth(availableWidth, GridColumns, 90);
+            ItemWidth = w;
+            ItemHeight = GridLayoutHelper.CalcItemHeight(w, aspect);
         }
 
         public async Task LoadItemsAsync(int wikiType, int catalogueId, string title = null, bool forceRefresh = false)

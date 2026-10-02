@@ -5,10 +5,34 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:helpers="using:KuroBBS.Helpers"
     xmlns:models="using:KuroBBS.Models"
+    xmlns:local="using:KuroBBS"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
     Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+
+    <Page.Resources>
+        <!-- 段内「有序块」模板：文字 -->
+        <DataTemplate x:Key="WikiBlockTextTemplate">
+            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Margin="0,0,0,6">
+                <RichTextBlock helpers:InlineRunsHelper.RunsSource="{Binding Runs}" FontSize="11" Foreground="#C8C8D8" LineHeight="17" />
+            </ScrollViewer>
+        </DataTemplate>
+
+        <!-- 段内「有序块」模板：图片（懒加载 + 点按放大） -->
+        <DataTemplate x:Key="WikiBlockImageTemplate">
+            <Border Background="#101016" Margin="0,0,0,6" Tag="{Binding ImageUrl}" Tapped="OnWikiImageTapped">
+                <Image helpers:KuroGifHelper.GifSource="{Binding ImageUrl}"
+                       helpers:KuroLazyImage.SourceUrl="{Binding ImageUrl}"
+                       helpers:KuroLazyImage.DecodeWidth="480"
+                       Stretch="Uniform" MaxHeight="260" />
+            </Border>
+        </DataTemplate>
+
+        <local:WikiBlockTemplateSelector x:Key="WikiBlockSelector"
+                                         TextTemplate="{StaticResource WikiBlockTextTemplate}"
+                                         ImageTemplate="{StaticResource WikiBlockImageTemplate}" />
+    </Page.Resources>
 
     <Page.BottomAppBar>
         <CommandBar Background="#121216" ClosedDisplayMode="Minimal" IsOpen="False">
@@ -636,17 +660,23 @@
                                                                                     <!-- Accordion Body -->
                                                                                     <Border Padding="10,8" Visibility="{Binding ContentVisibility}">
                                                                                         <StackPanel>
-                                                                                            <!-- Rich text description with colors -->
-                                                                                            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Margin="0,0,0,6"
-                                                                                                          Visibility="{Binding HasRuns, Converter={StaticResource BoolToVis}}">
-                                                                                                <RichTextBlock helpers:InlineRunsHelper.RunsSource="{Binding Runs}" FontSize="11" Foreground="#C8C8D8" LineHeight="17" />
-                                                                                            </ScrollViewer>
+                                                                                            <!-- 有序块：文字与图片按正文顺序交错，保证图片在正确位置 -->
+                                                                                            <ItemsControl ItemsSource="{Binding Blocks}"
+                                                                                                          ItemTemplateSelector="{StaticResource WikiBlockSelector}"
+                                                                                                          Visibility="{Binding HasBlocks, Converter={StaticResource BoolToVis}}" />
 
-                                                                                            <!-- Preview GIF / Image (支持动态 GIF 流畅播放) -->
-                                                                                            <Border Background="#101016" Margin="0,0,0,6" Visibility="{Binding HasImage, Converter={StaticResource BoolToVis}}">
-                                                                                                <Image helpers:KuroGifHelper.GifSource="{Binding ImageUrl}"
-                                                                                                       Source="{Binding ImageUrl, Converter={StaticResource ImageCache}, ConverterParameter=480}" Stretch="Uniform" MaxHeight="240" />
-                                                                                            </Border>
+                                                                                            <!-- 兜底：没有有序块时才走旧的「整段文本 + 单张预览图」 -->
+                                                                                            <StackPanel Visibility="{Binding HasBlocks, Converter={StaticResource InvBoolToVis}}">
+                                                                                                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Margin="0,0,0,6"
+                                                                                                              Visibility="{Binding HasRuns, Converter={StaticResource BoolToVis}}">
+                                                                                                    <RichTextBlock helpers:InlineRunsHelper.RunsSource="{Binding Runs}" FontSize="11" Foreground="#C8C8D8" LineHeight="17" />
+                                                                                                </ScrollViewer>
+
+                                                                                                <Border Background="#101016" Margin="0,0,0,6" Visibility="{Binding HasImage, Converter={StaticResource BoolToVis}}">
+                                                                                                    <Image helpers:KuroGifHelper.GifSource="{Binding ImageUrl}"
+                                                                                                           Source="{Binding ImageUrl, Converter={StaticResource ImageCache}, ConverterParameter=480}" Stretch="Uniform" MaxHeight="240" />
+                                                                                                </Border>
+                                                                                            </StackPanel>
 
                                                                                             <!-- Nested Children Accordion Items (e.g. 招式1, 招式2) -->
                                                                                             <ItemsControl ItemsSource="{Binding Children}" Visibility="{Binding HasChildren, Converter={StaticResource BoolToVis}}">
@@ -854,7 +884,7 @@
                                                                                         Tag="{Binding}" Tapped="OnWikiImageTapped">
                                                                                     <Image helpers:KuroGifHelper.GifSource="{Binding}"
                                                                                            helpers:KuroLazyImage.SourceUrl="{Binding}"
-                                                                                           helpers:KuroLazyImage.DecodeWidth="720"
+                                                                                           helpers:KuroLazyImage.DecodeWidth="480"
                                                                                            Stretch="Uniform" MaxHeight="300" />
                                                                                 </Border>
                                                                             </DataTemplate>
@@ -911,6 +941,87 @@
                                                     </ItemsControl>
                                                 </StackPanel>
 
+                                                <!-- 4.5 非 tabs 组件的 &lt;details&gt; 折叠树
+                                                     （「常见问题FAQ」17 项、「战斗系统」7 项都是这种）。
+                                                     以前整篇被压成扁平文本 + 末尾堆一坨图片，图片位置全错。 -->
+                                                <StackPanel Visibility="{Binding HasSections, Converter={StaticResource BoolToVis}}" Margin="0,0,0,10">
+                                                    <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="SemiBold" Foreground="White" Margin="0,0,0,6"
+                                                               Visibility="{Binding Title, Converter={StaticResource NullToVis}}" />
+                                                    <ItemsControl ItemsSource="{Binding Sections}">
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate>
+                                                                <Border Background="#161622" BorderBrush="#2A2A3C" BorderThickness="1" Margin="0,0,0,8">
+                                                                    <StackPanel>
+                                                                        <Border Background="#1E1E2C" Padding="10,8" Tapped="OnSectionHeaderTap">
+                                                                            <Grid>
+                                                                                <Grid.ColumnDefinitions>
+                                                                                    <ColumnDefinition Width="*" />
+                                                                                    <ColumnDefinition Width="Auto" />
+                                                                                    <ColumnDefinition Width="20" />
+                                                                                </Grid.ColumnDefinitions>
+                                                                                <TextBlock Text="{Binding Title}" FontSize="12" FontWeight="SemiBold" Foreground="White" VerticalAlignment="Center" TextWrapping="Wrap" />
+                                                                                <TextBlock Grid.Column="1" Text="{Binding Subtitle}" FontSize="10" Foreground="#FFA500" VerticalAlignment="Center" Margin="0,0,8,0"
+                                                                                           Visibility="{Binding HasSubtitle, Converter={StaticResource BoolToVis}}" />
+                                                                                <TextBlock Grid.Column="2" Text="{Binding ExpandGlyph}" FontFamily="Segoe UI Symbol" FontSize="12" Foreground="{StaticResource MetroSubTextBrush}" VerticalAlignment="Center" />
+                                                                            </Grid>
+                                                                        </Border>
+
+                                                                        <Border Padding="10,8" Visibility="{Binding ContentVisibility}">
+                                                                            <StackPanel>
+                                                                                <!-- 文字 / 图片按正文顺序交错 -->
+                                                                                <ItemsControl ItemsSource="{Binding Blocks}"
+                                                                                              ItemTemplateSelector="{StaticResource WikiBlockSelector}"
+                                                                                              Visibility="{Binding HasBlocks, Converter={StaticResource BoolToVis}}" />
+
+                                                                                <StackPanel Visibility="{Binding HasBlocks, Converter={StaticResource InvBoolToVis}}">
+                                                                                    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Margin="0,0,0,6"
+                                                                                                  Visibility="{Binding HasRuns, Converter={StaticResource BoolToVis}}">
+                                                                                        <RichTextBlock helpers:InlineRunsHelper.RunsSource="{Binding Runs}" FontSize="11" Foreground="#C8C8D8" LineHeight="17" />
+                                                                                    </ScrollViewer>
+                                                                                    <Border Background="#101016" Margin="0,0,0,6" Visibility="{Binding HasImage, Converter={StaticResource BoolToVis}}">
+                                                                                        <Image helpers:KuroGifHelper.GifSource="{Binding ImageUrl}"
+                                                                                               helpers:KuroLazyImage.SourceUrl="{Binding ImageUrl}"
+                                                                                               helpers:KuroLazyImage.DecodeWidth="480"
+                                                                                               Stretch="Uniform" MaxHeight="240" />
+                                                                                    </Border>
+                                                                                </StackPanel>
+
+                                                                                <!-- 嵌套子折叠项 -->
+                                                                                <ItemsControl ItemsSource="{Binding Children}" Visibility="{Binding HasChildren, Converter={StaticResource BoolToVis}}">
+                                                                                    <ItemsControl.ItemTemplate>
+                                                                                        <DataTemplate>
+                                                                                            <Border Background="#14141E" BorderBrush="#262636" BorderThickness="1" Padding="8" Margin="0,0,0,6">
+                                                                                                <StackPanel>
+                                                                                                    <TextBlock Text="{Binding Title}" FontSize="11" FontWeight="Bold" Foreground="{StaticResource MetroAccentBrush}" Margin="0,0,0,4" />
+                                                                                                    <ItemsControl ItemsSource="{Binding Blocks}"
+                                                                                                                  ItemTemplateSelector="{StaticResource WikiBlockSelector}"
+                                                                                                                  Visibility="{Binding HasBlocks, Converter={StaticResource BoolToVis}}" />
+                                                                                                    <StackPanel Visibility="{Binding HasBlocks, Converter={StaticResource InvBoolToVis}}">
+                                                                                                        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Margin="0,0,0,4"
+                                                                                                                      Visibility="{Binding HasRuns, Converter={StaticResource BoolToVis}}">
+                                                                                                            <RichTextBlock helpers:InlineRunsHelper.RunsSource="{Binding Runs}" FontSize="11" Foreground="#B0B0C0" LineHeight="16" />
+                                                                                                        </ScrollViewer>
+                                                                                                        <Border Background="#0C0C12" Visibility="{Binding HasImage, Converter={StaticResource BoolToVis}}">
+                                                                                                            <Image helpers:KuroGifHelper.GifSource="{Binding ImageUrl}"
+                                                                                                                   helpers:KuroLazyImage.SourceUrl="{Binding ImageUrl}"
+                                                                                                                   helpers:KuroLazyImage.DecodeWidth="480"
+                                                                                                                   Stretch="Uniform" MaxHeight="200" />
+                                                                                                        </Border>
+                                                                                                    </StackPanel>
+                                                                                                </StackPanel>
+                                                                                            </Border>
+                                                                                        </DataTemplate>
+                                                                                    </ItemsControl.ItemTemplate>
+                                                                                </ItemsControl>
+                                                                            </StackPanel>
+                                                                        </Border>
+                                                                    </StackPanel>
+                                                                </Border>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+                                                </StackPanel>
+
                                                 <!-- 5. DEFAULT TEXT & BASIC COMPONENT (Fallback with Rich API Colors) -->
                                                 <StackPanel Visibility="{Binding HasCleanText, Converter={StaticResource BoolToVis}}" Margin="0,0,0,6">
                                                     <!-- Component Subtitle -->
@@ -931,7 +1042,7 @@
                                                         Tag="{Binding ImageUrl}" Tapped="OnWikiImageTapped">
                                                     <Image helpers:KuroGifHelper.GifSource="{Binding ImageUrl}"
                                                            helpers:KuroLazyImage.SourceUrl="{Binding ImageUrl}"
-                                                           helpers:KuroLazyImage.DecodeWidth="720"
+                                                           helpers:KuroLazyImage.DecodeWidth="480"
                                                            Stretch="Uniform" MaxHeight="300" />
                                                 </Border>
 
@@ -943,7 +1054,7 @@
                                                                     Tag="{Binding}" Tapped="OnWikiImageTapped">
                                                                 <Image helpers:KuroGifHelper.GifSource="{Binding}"
                                                                        helpers:KuroLazyImage.SourceUrl="{Binding}"
-                                                                       helpers:KuroLazyImage.DecodeWidth="720"
+                                                                       helpers:KuroLazyImage.DecodeWidth="480"
                                                                        Stretch="Uniform" MaxHeight="260" />
                                                             </Border>
                                                         </DataTemplate>

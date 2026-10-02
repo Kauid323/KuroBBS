@@ -427,5 +427,31 @@ namespace KuroBBS
             _toastTimer.Start();
         }
     }
+
+    /// <summary>
+    /// 按 PostContentBlock 的类型挑选模板：文字 → 富文本，图片/横幅 → 懒加载图片。
+    ///
+    /// 为什么不用「一个模板里同时放 RichTextBlock 和 Image、靠 Visibility 切换」：
+    /// 那样每个文字块都会白白创建一个 Image 元素，KuroLazyImage.SourceUrl 会被设置、
+    /// 进而进懒加载注册表，既浪费内存（本页正是 OOM 高发区）又可能误触发下载。
+    /// 模板选择器只为真正需要的块创建对应元素。
+    /// </summary>
+    public class WikiBlockTemplateSelector : DataTemplateSelector
+    {
+        public DataTemplate TextTemplate { get; set; }
+        public DataTemplate ImageTemplate { get; set; }
+
+        protected override DataTemplate SelectTemplateCore(object item)
+        {
+            var block = item as PostContentBlock;
+            if (block == null) return TextTemplate;
+            return block.IsImage || block.IsBanner ? ImageTemplate : TextTemplate;
+        }
+
+        protected override DataTemplate SelectTemplateCore(object item, DependencyObject container)
+        {
+            return SelectTemplateCore(item);
+        }
+    }
 }
 

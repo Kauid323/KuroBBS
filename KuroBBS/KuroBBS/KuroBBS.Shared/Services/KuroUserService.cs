@@ -7,6 +7,29 @@ using KuroBBS.Models;
 
 namespace KuroBBS.Services
 {
+    public sealed class UserCollectionPage
+    {
+        public List<PostItem> Posts { get; private set; }
+        public bool HasNext { get; set; }
+
+        public UserCollectionPage()
+        {
+            Posts = new List<PostItem>();
+        }
+    }
+
+    public sealed class UserFollowPageResult
+    {
+        public List<UserFollowItem> Users { get; private set; }
+        public bool HasNext { get; set; }
+        public bool IsSuccess { get; set; }
+
+        public UserFollowPageResult()
+        {
+            Users = new List<UserFollowItem>();
+        }
+    }
+
     public class KuroUserService
     {
         private static KuroUserService _instance;
@@ -126,10 +149,10 @@ namespace KuroBBS.Services
             return list;
         }
 
-        public async Task<List<PostItem>> GetUserCollectionsAsync(string userId, int pageIndex = 1, int pageSize = 20)
+        public async Task<UserCollectionPage> GetUserCollectionsPageAsync(string userId, int pageIndex = 1, int pageSize = 20)
         {
-            var list = new List<PostItem>();
-            if (string.IsNullOrEmpty(userId)) return list;
+            var page = new UserCollectionPage();
+            if (string.IsNullOrEmpty(userId)) return page;
 
             var parameters = new Dictionary<string, string>
             {
@@ -143,6 +166,8 @@ namespace KuroBBS.Services
             if (json != null && json.ContainsKey("data") && json.GetNamedValue("data").ValueType == JsonValueType.Object)
             {
                 var dataObj = json.GetNamedObject("data");
+                page.HasNext = GetNumber(dataObj, "hasNext", 0) == 1 || GetBool(dataObj, "hasNext", false);
+
                 if (dataObj.ContainsKey("postList") && dataObj.GetNamedValue("postList").ValueType == JsonValueType.Array)
                 {
                     var postArr = dataObj.GetNamedArray("postList");
@@ -153,13 +178,97 @@ namespace KuroBBS.Services
                         var post = KuroForumService.Instance.ParseCommunityPostItem(pObj, 2);
                         if (post != null)
                         {
-                            list.Add(post);
+                            page.Posts.Add(post);
                         }
                     }
                 }
             }
 
-            return list;
+            return page;
+        }
+
+        public async Task<List<PostItem>> GetUserCollectionsAsync(string userId, int pageIndex = 1, int pageSize = 20)
+        {
+            var page = await GetUserCollectionsPageAsync(userId, pageIndex, pageSize);
+            return page.Posts;
+        }
+
+        public async Task<UserFollowPageResult> GetUserFollowPageAsync(string otherUserId, int pageNo = 1, int pageSize = 20)
+        {
+            var page = new UserFollowPageResult();
+            if (string.IsNullOrEmpty(otherUserId)) return page;
+
+            var parameters = new Dictionary<string, string>
+            {
+                { "otherUserId", otherUserId },
+                { "pageNo", pageNo.ToString() },
+                { "pageSize", pageSize.ToString() },
+                { "type", "2" }
+            };
+
+            var json = await KuroApiClient.Instance.PostFormAsync("/user/follow", parameters);
+            if (json == null || !json.ContainsKey("data") || json.GetNamedValue("data").ValueType != JsonValueType.Object)
+            {
+                return page;
+            }
+
+            var dataObj = json.GetNamedObject("data");
+            if (!dataObj.ContainsKey("followInfo") || dataObj.GetNamedValue("followInfo").ValueType != JsonValueType.Array)
+            {
+                return page;
+            }
+
+            var followInfo = dataObj.GetNamedArray("followInfo");
+            page.IsSuccess = true;
+            foreach (var itemValue in followInfo)
+            {
+                if (itemValue.ValueType != JsonValueType.Object) continue;
+                var itemObj = itemValue.GetObject();
+                var item = new UserFollowItem
+                {
+                    UserId = GetString(itemObj, "followUserId", ""),
+                    UserName = GetString(itemObj, "followUserName", "用户"),
+                    AvatarUrl = GetString(itemObj, "followUserUrl", GetString(itemObj, "headUrl", GetString(itemObj, "userHeadUrl", ""))),
+                    HeadFrameUrl = GetString(itemObj, "headFrameUrl", ""),
+                    Signature = GetString(itemObj, "signature", "这个人很懒，还没有签名。"),
+                    FansCount = (int)GetNumber(itemObj, "fansCount", 0),
+                    PostCount = (int)GetNumber(itemObj, "postCount", 0),
+                    IdentifyClassify = (int)GetNumber(itemObj, "identifyClassify", 0),
+                    IsFollow = GetNumber(itemObj, "isFollow", 0) != 0 || GetBool(itemObj, "isFollow", false),
+                    MutualFollow = GetNumber(itemObj, "mutualFollow", 0) != 0 || GetBool(itemObj, "mutualFollow", false)
+                };
+
+                if (itemObj.ContainsKey("newIdentifyNames") && itemObj.GetNamedValue("newIdentifyNames").ValueType == JsonValueType.Array)
+                {
+                    foreach (var nameValue in itemObj.GetNamedArray("newIdentifyNames"))
+                    {
+                        if (nameValue.ValueType == JsonValueType.String)
+                        {
+                            string name = nameValue.GetString();
+                            if (!string.IsNullOrWhiteSpace(name)) item.IdentifyNames.Add(name);
+                        }
+                    }
+                }
+                else if (itemObj.ContainsKey("identifyNames"))
+                {
+                    string identityText = GetString(itemObj, "identifyNames", "");
+                    if (!string.IsNullOrWhiteSpace(identityText))
+                    {
+                        foreach (var name in identityText.Split(new[] { '、', ',', '，' }, StringSplitOptions.RemoveEmptyEntries))
+                        {
+                            string trimmed = name.Trim();
+                            if (!string.IsNullOrEmpty(trimmed)) item.IdentifyNames.Add(trimmed);
+                        }
+                    }
+                }
+
+                page.Users.Add(item);
+            }
+
+            // The supplied response contract has no hasNext flag. A full page is the only
+            // safe indication to request another page; a short/empty page ends pagination.
+            page.HasNext = followInfo.Count >= pageSize;
+            return page;
         }
 
         public async Task<List<UserCommentNoticeItem>> GetUserCommentsAsync(string userId, int pageIndex = 1, int pageSize = 20)

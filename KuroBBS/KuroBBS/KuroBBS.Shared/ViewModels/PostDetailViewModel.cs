@@ -321,6 +321,48 @@ namespace KuroBBS.ViewModels
             set { _selectedImageUrl = value; OnPropertyChanged(); }
         }
 
+        /// <summary>
+        /// 当前打开查看器时，可左右切换的全部图片（缩略图预览条数据源）。
+        /// 点评论区某张图时填该楼层的图片集合；点正文图时填正文图片集合。
+        /// </summary>
+        private System.Collections.ObjectModel.ObservableCollection<PostImage> _viewerImages =
+            new System.Collections.ObjectModel.ObservableCollection<PostImage>();
+        public System.Collections.ObjectModel.ObservableCollection<PostImage> ViewerImages
+        {
+            get { return _viewerImages; }
+        }
+
+        public bool HasViewerImages
+        {
+            get { return _viewerImages != null && _viewerImages.Count > 1; }
+        }
+
+        /// <summary>
+        /// 预览条选中项。与 SelectedImageUrl 双向同步：
+        /// 换选中项 → 换主图；主图被程序设置 → 反查并选中。
+        /// </summary>
+        private int _selectedViewerIndex = -1;
+        public int SelectedViewerIndex
+        {
+            get { return _selectedViewerIndex; }
+            set
+            {
+                if (_selectedViewerIndex == value) return;
+                _selectedViewerIndex = value;
+
+                if (value >= 0 && value < _viewerImages.Count)
+                {
+                    var img = _viewerImages[value];
+                    if (img != null && !string.IsNullOrEmpty(img.Url))
+                    {
+                        _selectedImageUrl = img.Url;
+                        OnPropertyChanged("SelectedImageUrl");
+                    }
+                }
+                OnPropertyChanged();
+            }
+        }
+
         private bool _isLoadingComments = false;
         public bool IsLoadingComments
         {
@@ -341,6 +383,7 @@ namespace KuroBBS.ViewModels
         public ICommand SendCommentCommand { get; private set; }
         public ICommand RefreshCommentsCommand { get; private set; }
         public ICommand LoadMoreCommentsCommand { get; private set; }
+        public ICommand LoadMoreRepliesCommand { get; private set; }
         public ICommand ToggleCommentLikeCommand { get; private set; }
         public ICommand ToggleReplyLikeCommand { get; private set; }
         public ICommand OpenImageCommand { get; private set; }
@@ -366,6 +409,7 @@ namespace KuroBBS.ViewModels
             SendCommentCommand = new RelayCommand(async () => await SubmitCommentAsync());
             RefreshCommentsCommand = new RelayCommand(async () => await LoadCommentsAsync(true));
             LoadMoreCommentsCommand = new RelayCommand(async () => await LoadMoreCommentsAsync());
+            LoadMoreRepliesCommand = new RelayCommand<PostCommentItem>(async (c) => await LoadMoreRepliesAsync(c));
             ToggleCommentLikeCommand = new RelayCommand<PostCommentItem>(async (c) => await ToggleCommentLikeAsync(c));
             ToggleReplyLikeCommand = new RelayCommand<PostReplyItem>(async (r) => await ToggleReplyLikeAsync(r));
             _isFollowed = Post != null && (Post.IsFollow || (Post.Author != null && Post.Author.IsFollow));
@@ -384,6 +428,7 @@ namespace KuroBBS.ViewModels
                 IsImageViewerOpen = false;
                 SelectedImageUrl = null;
             });
+
 
             TogglePlayCommand = new RelayCommand(() =>
             {
@@ -410,6 +455,50 @@ namespace KuroBBS.ViewModels
             {
                 ChangeQuality(q);
             });
+        }
+
+        /// <summary>
+        /// 带「同组图片」地打开查看器：底部 9:1 预览条会列出这一组图，
+        /// 并自动选中被点的那张。缩略图全部走低分辨率解码，不会卡。
+        /// </summary>
+        public void OpenImageWithSiblings(string url, System.Collections.Generic.IEnumerable<PostImage> siblings)
+        {
+            if (string.IsNullOrEmpty(url)) return;
+
+            _viewerImages.Clear();
+            int index = -1;
+
+            if (siblings != null)
+            {
+                foreach (var img in siblings)
+                {
+                    if (img == null || string.IsNullOrEmpty(img.Url)) continue;
+                    if (index < 0 && string.Equals(img.Url, url, StringComparison.OrdinalIgnoreCase))
+                    {
+                        index = _viewerImages.Count;
+                    }
+                    _viewerImages.Add(img);
+                }
+            }
+
+            // 同组里没找到（例如正文图）就退化成「单张」，预览条自动隐藏
+            if (index < 0)
+            {
+                _viewerImages.Clear();
+                _viewerImages.Add(new PostImage { Url = url });
+                index = 0;
+            }
+
+            OnPropertyChanged("ViewerImages");
+            OnPropertyChanged("HasViewerImages");
+
+            _selectedViewerIndex = index;
+            OnPropertyChanged("SelectedViewerIndex");
+
+            _selectedImageUrl = url;
+            OnPropertyChanged("SelectedImageUrl");
+
+            IsImageViewerOpen = true;
         }
 
         public void ChangeQuality(VideoPlayInfoItem quality)
@@ -523,7 +612,9 @@ namespace KuroBBS.ViewModels
             IsLoadingComments = true;
             try
             {
-                var list = await KuroForumService.Instance.GetCommentsAsync(Post.PostId, Post.GameId, _currentPage, 20);
+                var result = await KuroForumService.Instance.GetCommentsPageAsync(Post.PostId, Post.GameId, _currentPage, 20);
+                var list = result.Items;
+
                 if (resetPage)
                 {
                     Comments.Clear();
@@ -533,7 +624,12 @@ namespace KuroBBS.ViewModels
                 {
                     Comments.Add(item);
                 }
-                _hasMoreComments = list.Count >= 20;
+
+                // 用接口真实返回的 hasNext，而不是「条数 >= pageSize」的猜测
+                _hasMoreComments = result.HasNext;
+
+                // 空页也视为没有更多，避免按钮点不动还一直显示
+                if (list.Count == 0) _hasMoreComments = false;
             }
             catch (Exception ex)
             {
@@ -542,6 +638,7 @@ namespace KuroBBS.ViewModels
             finally
             {
                 IsLoadingComments = false;
+                OnPropertyChanged("HasMoreComments");
             }
         }
 
@@ -550,6 +647,35 @@ namespace KuroBBS.ViewModels
             if (IsLoadingComments || !_hasMoreComments || Post == null || string.IsNullOrEmpty(Post.PostId)) return;
             _currentPage++;
             await LoadCommentsAsync(false);
+        }
+
+        /// <summary>
+        /// 展开某条评论的更多楼中楼回复。
+        /// commentList 只内联返回少量 replyVos，这里走 /forum/comment/getReplyList 分页补齐。
+        /// </summary>
+        public async Task LoadMoreRepliesAsync(PostCommentItem comment)
+        {
+            if (comment == null || Post == null || string.IsNullOrEmpty(Post.PostId)) return;
+            if (comment.IsLoadingReplies) return;
+
+            comment.IsLoadingReplies = true;
+            try
+            {
+                // ReplyPageIndex 从 1 起：第 1 页通常就是内联返回的那批，服务端会按 replyId 去重
+                int page = comment.ReplyPageIndex > 0 ? comment.ReplyPageIndex : 1;
+                await KuroForumService.Instance.GetRepliesAsync(comment, Post.PostId, page, 50);
+                comment.ReplyPageIndex = page + 1;
+            }
+            catch (Exception ex)
+            {
+                KuroLogger.Warn("REPLIES_ERR", "Error loading replies: " + ex.Message);
+            }
+            finally
+            {
+                comment.IsLoadingReplies = false;
+                comment.OnPropertyChangedPublic("ReplyExpandText");
+                comment.OnPropertyChangedPublic("HasMoreReplies");
+            }
         }
 
         public async Task ToggleCommentLikeAsync(PostCommentItem comment)

@@ -19,6 +19,57 @@ namespace KuroBBS.Helpers
         private static readonly Regex StyleDecorationRegex = new Regex(@"text-decoration\s*:\s*([^;""']+)");
         private static readonly Regex EmojiRegex = new Regex(@"_\[/([^\]]+)\]");
 
+        /// <summary>单个 &lt;img&gt; 标签（用于逐个解析属性，避免跨标签串味）。</summary>
+        private static readonly Regex ImgTagRegex = new Regex(@"<img\b[^>]*>", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+
+        /// <summary>块级子元素的起始标签（用于判断容器块是否需要递归拆分）。</summary>
+        private static readonly Regex BlockChildRegex = new Regex(@"<(p|div|h[1-6]|blockquote)(\s|>)", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+
+        /// <summary>
+        /// Word / 旧版编辑器粘贴产生的「条件注释」。
+        /// 形态：
+        ///   &lt;!--[if gte vml 1]&gt; ... &lt;![endif]--&gt;   （带内容的整段）
+        ///   &lt;!--[if !vml]--&gt;&lt;!--[endif]--&gt;            （空壳）
+        ///   &lt;!--[if !supportLists]--&gt;...&lt;!--[endif]--&gt;
+        /// 里面塞的是 &lt;v:imagedata src="file:///C:/Users/.../clip_image001.png"&gt;
+        /// 这类本地路径，留在正文里会：①污染属性解析（后出现的 src 覆盖真正的图片 URL）
+        /// ②让用户看到一堆乱字符。必须整段剔除。
+        /// 只认 **`]>` 结尾** 的开启标签（`&lt;!-- [if gte vml 1]&gt;`），配到 `&lt;![endif]--&gt;`。
+        ///
+        /// 千万别把 `-->` 也当成开启标签的结尾：真实数据里存在以 `-->` 结尾的空壳
+        /// `&lt;!-- [if !vml]--&gt;`，一旦允许它配对，惰性 `.*?` 就会一路跨到**下一个**
+        /// `&lt;![endif]--&gt;`，把中间整段正文和图片一起吞掉
+        /// （实测会吃掉「与红光相反」那段和它的配图）。空壳交给下面的通用规则处理。
+        /// Singleline 允许跨行。
+        /// </summary>
+        private static readonly Regex ConditionalCommentRegex =
+            new Regex(@"<!--\s*\[if[^\[]*?\]>.*?<!\s*\[endif\]\s*-->", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+
+        /// <summary>
+        /// 兜底：任何形式的普通 HTML 注释 &lt;!-- ... --&gt;，**包括** `[if` 开头的。
+        /// 真实数据里存在没有配对 `&lt;![endif]&gt;` 的孤儿：
+        /// `&lt;!-- [if !vml]--&gt;` 与写成 `&lt;!--[endif]--&gt;`（dash 位置不标准）的闭合，
+        /// 只靠上面那条配对规则漏不掉。因为这条是惰性且不跨注释，不会误吞正文。
+        /// </summary>
+        private static readonly Regex HtmlCommentRegex =
+            new Regex(@"<!--.*?-->", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+
+        /// <summary>
+        /// 去掉条件注释与 HTML 注释。所有解析入口都应先过一遍这个。
+        /// </summary>
+        public static string StripComments(string html)
+        {
+            if (string.IsNullOrEmpty(html)) return html;
+            try
+            {
+                // 先精确配对整段，再通用兜底，两步缺一不可。
+                html = ConditionalCommentRegex.Replace(html, "");
+                html = HtmlCommentRegex.Replace(html, "");
+            }
+            catch { }
+            return html;
+        }
+
         private static readonly Dictionary<string, Windows.UI.Color> NamedColors = new Dictionary<string, Windows.UI.Color>(StringComparer.OrdinalIgnoreCase)
         {
             { "red", Windows.UI.Color.FromArgb(255, 255, 69, 58) },
@@ -45,6 +96,10 @@ namespace KuroBBS.Helpers
             var blocks = new List<PostContentBlock>();
             if (string.IsNullOrWhiteSpace(html)) return blocks;
 
+            // 先剔除条件注释（Word 残留的 <v:imagedata src="file:///..."> 就藏在这里）
+            html = StripComments(html);
+            if (string.IsNullOrWhiteSpace(html)) return blocks;
+
             // Normalize newlines
             html = html.Replace("\r", "").Replace("\n", "");
 
@@ -69,35 +124,58 @@ namespace KuroBBS.Helpers
                 string tag = match.Groups[1].Value.ToLower();
                 string inner = match.Groups[2].Value;
 
-                // Check for Image Block (standalone <img> or <div> containing <img>)
-                if (tag == "img" || (!string.IsNullOrEmpty(inner) && inner.Contains("<img")))
+                // 容器块（div / p / blockquote）内部还有块级子元素时，必须先递归拆分。
+                // 否则 BlockRegex 的惰性匹配会把整个
+                //   <div class="kr-collapse-content"><p>文字</p><p><img></p>...</div>
+                // 当成「一个含 img 的 div」，整段被压成单张图片 —— 正文全丢、
+                // 图片位置错乱（常见问题FAQ / 战斗系统 就是这种情况）。
+                if (tag != "img" && ContainsBlockChild(inner))
                 {
-                    string imgTag = (tag == "img") ? match.Value : inner;
-                    string src = null;
-                    int w = 0, h = 0;
-
-                    var attrMatches = ImgAttrRegex.Matches(imgTag);
-                    foreach (Match am in attrMatches)
+                    var childBlocks = ParseHtml(inner);
+                    if (childBlocks.Count > 0)
                     {
-                        string attrName = am.Groups[1].Value.ToLower();
-                        string attrVal = am.Groups[2].Value;
-                        if (attrName == "src") src = attrVal;
-                        else if (attrName == "width") int.TryParse(attrVal, out w);
-                        else if (attrName == "height") int.TryParse(attrVal, out h);
-                    }
-
-                    if (!string.IsNullOrEmpty(src))
-                    {
-                        bool isBanner = src.Contains("/postBanner/") || (w > 0 && h > 0 && w >= h * 4);
-                        blocks.Add(new PostContentBlock
-                        {
-                            BlockType = isBanner ? ContentBlockType.Banner : ContentBlockType.Image,
-                            ImageUrl = src,
-                            ImageWidth = w,
-                            ImageHeight = h
-                        });
+                        blocks.AddRange(childBlocks);
                         continue;
                     }
+                }
+
+                // Image Block: 块内每出现一个 <img> 就产出一个图片块，
+                // 这样 <p><img A><img B></p> 的并排两张图都不会丢。
+                bool hasImg = tag == "img" || (!string.IsNullOrEmpty(inner) && inner.Contains("<img"));
+                if (hasImg)
+                {
+                    string imgScope = (tag == "img") ? match.Value : inner;
+                    bool emitted = false;
+
+                    foreach (Match it in ImgTagRegex.Matches(imgScope))
+                    {
+                        string src = null;
+                        int w = 0, h = 0;
+
+                        // 只解析「这一个 <img> 标签内部」的属性。
+                        // 不能像以前那样对整个块做 ImgAttrRegex：Wiki 正文里常混入
+                        // Word 粘贴残留的 <!-- [if gte vml 1]><v:imagedata src="file:///C:/...">
+                        // 那段里的 file:// 会因为「后出现的 src 覆盖先出现的」而胜出，
+                        // 最终渲染成一个永远加载不出来的本地路径。
+                        var attrMatches = ImgAttrRegex.Matches(it.Value);
+                        foreach (Match am in attrMatches)
+                        {
+                            string attrName = am.Groups[1].Value.ToLower();
+                            string attrVal = am.Groups[2].Value;
+                            if (attrName == "src") src = attrVal;
+                            else if (attrName == "width") int.TryParse(attrVal, out w);
+                            else if (attrName == "height") int.TryParse(attrVal, out h);
+                        }
+
+                        if (string.IsNullOrEmpty(src)) continue;
+                        if (!src.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+                            && !src.StartsWith("https://", StringComparison.OrdinalIgnoreCase)) continue;
+
+                        blocks.Add(MakeImageBlock(src, w, h));
+                        emitted = true;
+                    }
+
+                    if (emitted) continue;
                 }
 
                 if (tag.StartsWith("h"))
@@ -133,9 +211,45 @@ namespace KuroBBS.Helpers
             return blocks;
         }
 
+        /// <summary>
+        /// 容器块内部是否还嵌着块级子元素（&lt;p&gt; / &lt;div&gt; / &lt;h1-6&gt; / &lt;blockquote&gt;）。
+        /// 有就必须递归拆分，否则整段会被 BlockRegex 的惰性匹配吞成一个块。
+        /// </summary>
+        private static bool ContainsBlockChild(string inner)
+        {
+            return !string.IsNullOrEmpty(inner) && BlockChildRegex.IsMatch(inner);
+        }
+
+        /// <summary>按宽高比判定「装饰性横幅 banner」并生成图片块。</summary>
+        private static PostContentBlock MakeImageBlock(string src, int w, int h)
+        {
+            // 判定「装饰性横幅（banner）」的规则必须非常保守：
+            // banner 会被渲染成 MaxHeight≈44px 的窄条，一旦把正文里
+            // 的正常图片误判成 banner，就会被压扁、看起来「显示不全」。
+            //
+            // 真实案例：活动帖里的 1400×270 路线图/活动图（宽高比 ≈5.19）
+            // 之前因 `w >= h*4` 被误判成 banner，结果只显示一条 44px 的窄缝。
+            //
+            // 因此：仅当 URL 明确带 /postBanner/ 路径，或「极其扁平」
+            // （宽高比 ≥ 8 且绝对高度 ≤ 160）时才当作 banner。
+            bool isBanner = src.Contains("/postBanner/") ||
+                            (w > 0 && h > 0 && h <= 160 && w >= h * 8);
+
+            return new PostContentBlock
+            {
+                BlockType = isBanner ? ContentBlockType.Banner : ContentBlockType.Image,
+                ImageUrl = src,
+                ImageWidth = w,
+                ImageHeight = h
+            };
+        }
+
         public static List<PostTextRun> ParseInlineHtml(string html, bool isHeading, string defaultColor)
         {
             var runs = new List<PostTextRun>();
+            if (string.IsNullOrEmpty(html)) return runs;
+
+            html = StripComments(html);
             if (string.IsNullOrEmpty(html)) return runs;
 
             bool bold = isHeading;

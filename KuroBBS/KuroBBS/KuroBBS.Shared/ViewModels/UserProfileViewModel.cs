@@ -265,14 +265,14 @@ namespace KuroBBS.ViewModels
 
                 // Load collections
                 IsLoadingCollections = true;
-                var collList = await KuroUserService.Instance.GetUserCollectionsAsync(_userId, _collectionsPage, 20);
+                var collectionPage = await KuroUserService.Instance.GetUserCollectionsPageAsync(_userId, _collectionsPage, 20);
                 Collections.Clear();
-                foreach (var c in collList)
+                foreach (var c in collectionPage.Posts)
                 {
                     Collections.Add(c);
                 }
-                HasNoCollections = (Collections.Count == 0);
-                _hasMoreCollections = collList.Count >= 20;
+                _hasMoreCollections = collectionPage.HasNext;
+                HasNoCollections = (Collections.Count == 0 && !_hasMoreCollections);
                 IsLoadingCollections = false;
 
                 // Load comments
@@ -362,20 +362,16 @@ namespace KuroBBS.ViewModels
             IsLoadingCollections = true;
             try
             {
-                _collectionsPage++;
-                var nextColls = await KuroUserService.Instance.GetUserCollectionsAsync(_userId, _collectionsPage, 20);
-                if (nextColls.Count > 0)
+                int nextPage = _collectionsPage + 1;
+                var nextCollectionPage = await KuroUserService.Instance.GetUserCollectionsPageAsync(_userId, nextPage, 20);
+                foreach (var c in nextCollectionPage.Posts)
                 {
-                    foreach (var c in nextColls)
-                    {
-                        Collections.Add(c);
-                    }
-                    _hasMoreCollections = nextColls.Count >= 20;
+                    Collections.Add(c);
                 }
-                else
-                {
-                    _hasMoreCollections = false;
-                }
+
+                _collectionsPage = nextPage;
+                _hasMoreCollections = nextCollectionPage.HasNext;
+                HasNoCollections = (Collections.Count == 0 && !_hasMoreCollections);
             }
             catch (Exception ex)
             {

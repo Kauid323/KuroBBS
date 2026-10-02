@@ -213,6 +213,18 @@ namespace KuroBBS
             this.Frame.Navigate(typeof(SettingsPage));
         }
 
+        /// <summary>签到页的「库洛币余额」卡片 → 金币商店。</summary>
+        private void OnGoToGoldShopClick(object sender, RoutedEventArgs e)
+        {
+            this.Frame.Navigate(typeof(GoldShopPage));
+        }
+
+        /// <summary>签到页的「任务中心」入口 → 任务中心页。gameId=0 = 不区分游戏。</summary>
+        private void OnGoToTaskCenterClick(object sender, RoutedEventArgs e)
+        {
+            this.Frame.Navigate(typeof(TaskCenterPage), 0);
+        }
+
         private void OnGoToSignInClick(object sender, RoutedEventArgs e)
         {
             if (MainPivot != null && MainPivot.Items != null)

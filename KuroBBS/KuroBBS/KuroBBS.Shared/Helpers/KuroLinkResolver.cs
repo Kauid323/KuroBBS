@@ -16,7 +16,7 @@ namespace KuroBBS.Helpers
         Post,
         /// <summary>社区话题：/topic/&lt;topicId&gt;，跳 TopicDetailPage。</summary>
         Topic,
-        /// <summary>用户主页：/user/&lt;uid&gt; 或 /userCenter?uid=，跳 UserProfilePage。</summary>
+        /// <summary>用户主页：/user/&lt;uid&gt;、/userCenter?uid=、/person-center?id=&lt;uid&gt;，跳 UserProfilePage。</summary>
         User,
         /// <summary>站外链接：交给系统浏览器。</summary>
         External
@@ -90,9 +90,18 @@ namespace KuroBBS.Helpers
                 return target;
             }
 
-            // 4. 用户主页：/user/<digits>、/userCenter/<digits> 或 ?uid=
+            // 4. 用户主页：/user/<digits>、/userCenter/<digits>、/person-center?id=<digits> 或 ?uid=
+            //    person-center 是 B 站式个人主页链接，真实 Wiki 正文里大量出现：
+            //      https://www.kurobbs.com/person-center?id=10046430
+            //    注意：id 这个 key 过于通用（postId/catalogueId 都不用裸 id），
+            //    因此只在路径里出现 person-center 时才认它，避免误伤。
             string uid = ExtractPathSegmentId(url, lower, "/user/");
             if (uid == null) uid = ExtractPathSegmentId(url, lower, "/usercenter/");
+            if (uid == null) uid = ExtractPathSegmentId(url, lower, "/person-center/");
+            if (uid == null && lower.IndexOf("person-center", StringComparison.Ordinal) >= 0)
+            {
+                uid = QueryDigits(url, "id");
+            }
             if (uid == null) uid = QueryDigits(url, "uid");
             if (uid != null)
             {

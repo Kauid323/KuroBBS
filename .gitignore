@@ -13,3 +13,5 @@ kurowiki/
 *.ps1
 __pycahce__/
 .workbuddy-ai/
+_build_scratch/
+kuroshop/

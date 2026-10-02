@@ -155,14 +155,41 @@ namespace KuroBBS.Services
 
         public async Task<List<PostCommentItem>> GetCommentsAsync(string postId, int gameId, int pageIndex = 1, int pageSize = 20, int sortType = 1)
         {
+            var page = await GetCommentsPageAsync(postId, gameId, pageIndex, pageSize, sortType);
+            return page.Items;
+        }
+
+        /// <summary>
+        /// 评论分页结果：除了列表，还带上接口真实返回的 hasNext，
+        /// 供「加载更多评论」按钮判断是否还有下一页。
+        /// </summary>
+        public class CommentPage
+        {
+            public List<PostCommentItem> Items { get; set; }
+            public bool HasNext { get; set; }
+            public CommentPage()
+            {
+                Items = new List<PostCommentItem>();
+                HasNext = false;
+            }
+        }
+
+        /// <summary>
+        /// 拉取某一页评论。契约：POST /forum/comment/getPostCommentListV2
+        ///   form: postId, gameId, pageIndex, pageSize, sortType
+        ///   resp: data.postCommentList[] + data.hasNext (1/0) + data.stickComments[]
+        /// </summary>
+        public async Task<CommentPage> GetCommentsPageAsync(string postId, int gameId, int pageIndex = 1, int pageSize = 20, int sortType = 1)
+        {
+            var page = new CommentPage();
             if (string.IsNullOrEmpty(postId))
             {
                 KuroLogger.Warn("COMMENTS_FEED_SKIP", "Cannot load comments: PostId is empty");
-                return new List<PostCommentItem>();
+                return page;
             }
 
             KuroLogger.Loading("COMMENTS_FEED", string.Format("Loading comments: PostId={0}, GameId={1}, Page={2}", postId, gameId, pageIndex));
-            var result = new List<PostCommentItem>();
+            var result = page.Items;
             var seenIds = new HashSet<string>();
 
             var parameters = new Dictionary<string, string>
@@ -185,6 +212,14 @@ namespace KuroBBS.Services
                 else if (dataVal.ValueType == JsonValueType.Object)
                 {
                     var dataObj = dataVal.GetObject();
+
+                    // hasNext 可能是数字 1/0 或布尔，两种都读
+                    bool hasNext = GetBoolean(dataObj, "hasNext", false);
+                    if (dataObj.ContainsKey("hasNext") && dataObj.GetNamedValue("hasNext").ValueType == JsonValueType.Number)
+                    {
+                        hasNext = GetNumber(dataObj, "hasNext", 0) == 1;
+                    }
+                    page.HasNext = hasNext;
 
                     // 1. Stick Comments (置顶)
                     if (dataObj.ContainsKey("stickComments") && dataObj.GetNamedValue("stickComments").ValueType == JsonValueType.Array)
@@ -211,7 +246,7 @@ namespace KuroBBS.Services
             }
 
             KuroLogger.Loading("COMMENTS_RENDER", string.Format("Rendered {0} comments for PostId={1}", result.Count, postId));
-            return result;
+            return page;
         }
 
         private void ParseCommentArray(JsonArray array, string postId, List<PostCommentItem> result, HashSet<string> seenIds, int gameId = 2, int forumId = 4)
@@ -1085,77 +1120,30 @@ namespace KuroBBS.Services
                 comment.IsLiked = GetBoolean(obj, "isLike", GetBoolean(obj, "isLiked", false));
                 comment.ReplyCount = (int)GetNumber(obj, "replyCount", GetNumber(obj, "commentCount", 0));
 
+                // 身份标签 / 官方标识（getPostCommentListV2 真实字段）
+                //   identifyClassify : int
+                //   identifyNames    : string（顿号分隔，如「鸣潮WIKI成员、摄影师、攻略作者、考据帝」）
+                //   newIdentifyNames : string[]（同上，拆分好的数组，优先用它）
+                comment.IsOfficial = GetBoolean(obj, "isOfficial", false);
+                comment.IsPublisher = GetBoolean(obj, "isPublisher", false);
+                comment.IdentifyClassify = (int)GetNumber(obj, "identifyClassify", 0);
+                ParseIdentifyNames(obj, comment.IdentifyNames);
+
                 // Nested Replies / 楼中楼 (replyVos)
+                // getPostCommentListV2 只内联返回少量 replyVos；若 ReplyCount 大于已内联的条数，
+                // 说明还有更多回复，需要用 /forum/comment/getReplyList 分页拉取（见 GetRepliesAsync）。
                 if (obj.ContainsKey("replyVos") && obj.GetNamedValue("replyVos").ValueType == JsonValueType.Array)
                 {
                     var replyArray = obj.GetNamedArray("replyVos");
                     foreach (var rVal in replyArray)
                     {
                         if (rVal.ValueType != JsonValueType.Object) continue;
-                        var rObj = rVal.GetObject();
-
-                        var reply = new PostReplyItem();
-                        reply.ReplyId = GetString(rObj, "replyId", GetString(rObj, "id", ""));
-                        reply.PostCommentId = GetString(rObj, "postCommentId", comment.CommentId);
-                        reply.PostId = postId;
-                        reply.GameId = comment.GameId;
-                        reply.ForumId = comment.ForumId;
-                        reply.UserId = GetString(rObj, "userId", "");
-                        reply.UserName = GetString(rObj, "userName", "漫游者");
-                        reply.AvatarUrl = GetString(rObj, "userHeadUrl", GetString(rObj, "headUrl", GetString(rObj, "avatarUrl", "")));
-                        reply.ToUserId = GetString(rObj, "toUserId", "");
-                        reply.ToUserName = GetString(rObj, "toUserName", "");
-                        reply.IpRegion = GetString(rObj, "ipRegion", "");
-                        reply.LikeCount = (int)GetNumber(rObj, "likeCount", 0);
-                        reply.IsLiked = GetBoolean(rObj, "isLike", GetBoolean(rObj, "isLiked", false));
-                        reply.ReplyTimeStr = GetString(rObj, "replyTime", GetString(rObj, "showTime", ""));
-
-                        string rContent = "";
-                        if (rObj.ContainsKey("replyContent") && rObj.GetNamedValue("replyContent").ValueType == JsonValueType.Array)
-                        {
-                            var rBlocks = rObj.GetNamedArray("replyContent");
-                            var sb = new System.Text.StringBuilder();
-                            foreach (var bVal in rBlocks)
-                            {
-                                if (bVal.ValueType != JsonValueType.Object) continue;
-                                var bObj = bVal.GetObject();
-                                if (bObj.ContainsKey("children") && bObj.GetNamedValue("children").ValueType == JsonValueType.Array)
-                                {
-                                    var runs = KuroEmojiService.Instance.ParseChildrenToRuns(bObj.GetNamedArray("children"));
-                                    reply.ContentRuns.AddRange(runs);
-                                    foreach (var r in runs)
-                                    {
-                                        if (!string.IsNullOrEmpty(r.Text)) sb.Append(r.Text);
-                                    }
-                                }
-                                else if (bObj.ContainsKey("content"))
-                                {
-                                    var cStr = GetString(bObj, "content", "");
-                                    if (!string.IsNullOrEmpty(cStr))
-                                    {
-                                        var runs = KuroEmojiService.Instance.ParseTextToRuns(cStr);
-                                        reply.ContentRuns.AddRange(runs);
-                                        sb.Append(cStr);
-                                    }
-                                }
-                            }
-                            rContent = sb.ToString().Trim();
-                            AppendContentImages(rBlocks, reply.ImageList);
-                        }
-
-                        if (string.IsNullOrEmpty(rContent) && rObj.ContainsKey("replyContentStr"))
-                        {
-                            rContent = GetString(rObj, "replyContentStr", "");
-                            if (reply.ContentRuns.Count == 0 && !string.IsNullOrEmpty(rContent))
-                            {
-                                reply.ContentRuns.AddRange(KuroEmojiService.Instance.ParseTextToRuns(rContent));
-                            }
-                        }
-
-                        reply.ReplyText = rContent;
-                        comment.Replies.Add(reply);
+                        ParseReplyObject(rVal.GetObject(), comment, postId);
                     }
                 }
+
+                // 内联的 replyVos 不够 ReplyCount 时，UI 显示「展开更多回复」
+                comment.HasMoreReplies = comment.ReplyCount > comment.Replies.Count;
 
                 // Robust User Info Parsing
                 comment.UserName = GetString(obj, "userName", GetString(obj, "toUserName", GetString(obj, "nickname", GetString(obj, "nickName", "漫游者"))));
@@ -1178,10 +1166,181 @@ namespace KuroBBS.Services
 
                 return comment;
             }
-            catch
+            catch (Exception ex)
             {
+                KuroLogger.Warn("COMMENT_PARSE_ERR", "Failed parsing comment: " + ex.Message);
                 return null;
             }
+        }
+
+        /// <summary>
+        /// 解析身份标签：优先 newIdentifyNames[]（已拆分），回退 identifyNames 字符串（顿号分隔）。
+        /// 结果填充到 target 列表，自动去重、去空白。
+        /// </summary>
+        private void ParseIdentifyNames(JsonObject obj, List<string> target)
+        {
+            if (obj == null || target == null) return;
+
+            // 1. newIdentifyNames : ["鸣潮WIKI成员","考据帝","攻略作者","摄影师"]
+            if (obj.ContainsKey("newIdentifyNames") && obj.GetNamedValue("newIdentifyNames").ValueType == JsonValueType.Array)
+            {
+                foreach (var v in obj.GetNamedArray("newIdentifyNames"))
+                {
+                    if (v.ValueType != JsonValueType.String) continue;
+                    string name = v.GetString();
+                    if (!string.IsNullOrWhiteSpace(name) && !target.Contains(name)) target.Add(name);
+                }
+            }
+
+            // 2. 回退 identifyNames : "鸣潮WIKI成员、摄影师、攻略作者、考据帝"
+            if (target.Count == 0 && obj.ContainsKey("identifyNames"))
+            {
+                string raw = GetString(obj, "identifyNames", "");
+                if (!string.IsNullOrWhiteSpace(raw))
+                {
+                    foreach (var part in raw.Split(new[] { '、', ',', '，' }, StringSplitOptions.RemoveEmptyEntries))
+                    {
+                        string name = part.Trim();
+                        if (!string.IsNullOrEmpty(name) && !target.Contains(name)) target.Add(name);
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// 解析单条回复对象（replyVos / getReplyList 的 replys[] 共用这一套字段）。
+        /// 抽出来是为了让 GetRepliesAsync 复用完全一致的解析逻辑，避免两处漂移。
+        /// </summary>
+        private void ParseReplyObject(JsonObject rObj, PostCommentItem comment, string postId)
+        {
+            if (rObj == null || comment == null) return;
+
+            var reply = new PostReplyItem();
+            reply.ReplyId = GetString(rObj, "replyId", GetString(rObj, "id", ""));
+            reply.PostCommentId = GetString(rObj, "postCommentId", comment.CommentId);
+            reply.PostId = postId;
+            reply.GameId = comment.GameId;
+            reply.ForumId = comment.ForumId;
+            reply.UserId = GetString(rObj, "userId", "");
+            reply.UserName = GetString(rObj, "userName", "漫游者");
+            reply.AvatarUrl = GetString(rObj, "userHeadUrl", GetString(rObj, "headUrl", GetString(rObj, "avatarUrl", "")));
+            reply.ToUserId = GetString(rObj, "toUserId", "");
+            reply.ToUserName = GetString(rObj, "toUserName", "");
+            reply.IpRegion = GetString(rObj, "ipRegion", "");
+            reply.LikeCount = (int)GetNumber(rObj, "likeCount", 0);
+            reply.IsLiked = GetBoolean(rObj, "isLike", GetBoolean(rObj, "isLiked", false));
+            reply.ReplyTimeStr = GetString(rObj, "replyTime", GetString(rObj, "showTime", ""));
+
+            string rContent = "";
+            if (rObj.ContainsKey("replyContent") && rObj.GetNamedValue("replyContent").ValueType == JsonValueType.Array)
+            {
+                var rBlocks = rObj.GetNamedArray("replyContent");
+                var sb = new System.Text.StringBuilder();
+                foreach (var bVal in rBlocks)
+                {
+                    if (bVal.ValueType != JsonValueType.Object) continue;
+                    var bObj = bVal.GetObject();
+                    if (bObj.ContainsKey("children") && bObj.GetNamedValue("children").ValueType == JsonValueType.Array)
+                    {
+                        var runs = KuroEmojiService.Instance.ParseChildrenToRuns(bObj.GetNamedArray("children"));
+                        reply.ContentRuns.AddRange(runs);
+                        foreach (var r in runs)
+                        {
+                            if (!string.IsNullOrEmpty(r.Text)) sb.Append(r.Text);
+                        }
+                    }
+                    else if (bObj.ContainsKey("content"))
+                    {
+                        var cStr = GetString(bObj, "content", "");
+                        if (!string.IsNullOrEmpty(cStr))
+                        {
+                            var runs = KuroEmojiService.Instance.ParseTextToRuns(cStr);
+                            reply.ContentRuns.AddRange(runs);
+                            sb.Append(cStr);
+                        }
+                    }
+                }
+                rContent = sb.ToString().Trim();
+                AppendContentImages(rBlocks, reply.ImageList);
+            }
+
+            if (string.IsNullOrEmpty(rContent) && rObj.ContainsKey("replyContentStr"))
+            {
+                rContent = GetString(rObj, "replyContentStr", "");
+                if (reply.ContentRuns.Count == 0 && !string.IsNullOrEmpty(rContent) && rContent != "[图片]")
+                {
+                    reply.ContentRuns.AddRange(KuroEmojiService.Instance.ParseTextToRuns(rContent));
+                }
+            }
+
+            reply.ReplyText = rContent;
+            comment.Replies.Add(reply);
+        }
+
+        /// <summary>
+        /// 拉取某条评论的楼中楼回复（分页）。
+        /// 契约（已验证）：POST /forum/comment/getReplyList
+        ///   form: pageIndex, pageSize, postCommentId, postId
+        ///   resp: data.replys[]（字段与 replyVos 一致）+ data.hasNext
+        /// </summary>
+        /// <returns>本次新增的回复列表（已并入 comment.Replies），并顺带更新 HasMoreReplies。</returns>
+        public async Task<List<PostReplyItem>> GetRepliesAsync(PostCommentItem comment, string postId, int pageIndex = 1, int pageSize = 50)
+        {
+            var added = new List<PostReplyItem>();
+            if (comment == null || string.IsNullOrEmpty(postId) || string.IsNullOrEmpty(comment.CommentId)) return added;
+
+            var parameters = new Dictionary<string, string>
+            {
+                { "postId", postId },
+                { "postCommentId", comment.CommentId },
+                { "pageIndex", pageIndex.ToString() },
+                { "pageSize", pageSize.ToString() }
+            };
+
+            var json = await KuroApiClient.Instance.PostFormAsync("/forum/comment/getReplyList", parameters);
+            if (json == null || !json.ContainsKey("data")) return added;
+
+            var dataVal = json.GetNamedValue("data");
+            if (dataVal.ValueType != JsonValueType.Object) return added;
+
+            var dataObj = dataVal.GetObject();
+            bool hasNext = GetBoolean(dataObj, "hasNext", false);
+            if (dataObj.ContainsKey("hasNext") && dataObj.GetNamedValue("hasNext").ValueType == JsonValueType.Number)
+            {
+                hasNext = GetNumber(dataObj, "hasNext", 0) == 1;
+            }
+
+            // 去重：内联返回过的 replyId 不再重复加
+            var existing = new HashSet<string>();
+            foreach (var r in comment.Replies)
+            {
+                if (r != null && !string.IsNullOrEmpty(r.ReplyId)) existing.Add(r.ReplyId);
+            }
+
+            if (dataObj.ContainsKey("replys") && dataObj.GetNamedValue("replys").ValueType == JsonValueType.Array)
+            {
+                int before = comment.Replies.Count;
+                foreach (var rVal in dataObj.GetNamedArray("replys"))
+                {
+                    if (rVal.ValueType != JsonValueType.Object) continue;
+                    var rObj = rVal.GetObject();
+                    string rid = GetString(rObj, "replyId", GetString(rObj, "id", ""));
+                    if (!string.IsNullOrEmpty(rid) && existing.Contains(rid)) continue;
+
+                    ParseReplyObject(rObj, comment, postId);
+                    if (!string.IsNullOrEmpty(rid)) existing.Add(rid);
+                }
+
+                for (int i = before; i < comment.Replies.Count; i++)
+                {
+                    added.Add(comment.Replies[i]);
+                }
+            }
+
+            // 已加载满 ReplyCount，或服务端说没有下一页 → 收起「展开更多回复」
+            comment.HasMoreReplies = hasNext && comment.Replies.Count < comment.ReplyCount;
+
+            return added;
         }
 
         private PostItem ParseOfficialEventItem(JsonObject obj, int defaultGameId)

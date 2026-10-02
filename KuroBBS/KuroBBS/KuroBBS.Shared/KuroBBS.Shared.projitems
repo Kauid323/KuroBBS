@@ -16,6 +16,7 @@
       <DependentUpon>App.xaml</DependentUpon>
     </Compile>
     <Compile Include="$(MSBuildThisFileDirectory)Models\KuroModels.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Models\KuroShopModels.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Models\HaruModels.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Helpers\RelayCommand.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Helpers\SettingsHelper.cs" />
@@ -26,10 +27,10 @@
     <Compile Include="$(MSBuildThisFileDirectory)Helpers\KuroGifHelper.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Helpers\KuroLazyImage.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Helpers\KuroLinkResolver.cs" />
-    <Compile Include="$(MSBuildThisFileDirectory)Helpers\KuroSoftKeyboardHelper.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Helpers\KuroHtmlPostParser.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Helpers\KuroPostPublishHelper.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Helpers\IFileOpenPickerContinuable.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Helpers\GridLayoutHelper.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Services\KuroApiClient.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Services\NetworkActivity.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Services\KuroImageCache.cs" />
@@ -37,6 +38,7 @@
     <Compile Include="$(MSBuildThisFileDirectory)Services\KuroForumService.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Services\KuroEmojiService.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Services\KuroSignInService.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Services\KuroShopService.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Services\KuroUserService.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Services\KuroAuthService.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Services\KuroVideoService.cs" />
@@ -49,6 +51,9 @@
     <Compile Include="$(MSBuildThisFileDirectory)ViewModels\WikiCatalogueTreeViewModel.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ViewModels\WikiItemListViewModel.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ViewModels\WikiEntryDetailViewModel.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ViewModels\GoldShopViewModel.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ViewModels\CommodityDetailViewModel.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ViewModels\TaskCenterViewModel.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ViewModels\CreatePostViewModel.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ViewModels\PostDetailViewModel.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ViewModels\UserProfileViewModel.cs" />

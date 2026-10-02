@@ -30,6 +30,12 @@ namespace KuroBBS.Models
 
     public class PostImage
     {
+        /// <summary>缩略图固定高度（像素）。评论区一律按这个高度出图，避免大图把列表撑爆。</summary>
+        public const double ThumbHeight = 90;
+
+        /// <summary>缩略图最长边（像素）。列表里只解到这么大，肉眼足够清晰又极省内存。</summary>
+        public const int ThumbDecodeWidth = 200;
+
         public string Url { get; set; }
         public int Width { get; set; }
         public int Height { get; set; }
@@ -64,6 +70,24 @@ namespace KuroBBS.Models
                 double maxH = IsPortrait ? 420 : 300;
                 double h = DisplayWidth * ((double)Height / Width);
                 return h <= maxH ? h : maxH;
+            }
+        }
+
+        /// <summary>
+        /// 缩略图显示宽度（像素）。固定高度 <see cref="ThumbHeight"/>，按真实宽高比反推宽度。
+        /// 尺寸缺失时按 4:3 估一个，保证不会算成 0。
+        /// </summary>
+        public double ThumbWidth
+        {
+            get
+            {
+                const double h = ThumbHeight;
+                if (Width <= 0 || Height <= 0) return h * 4 / 3;
+                double w = h * ((double)Width / Height);
+                // 极端长条图（全景/截长图）宽度会离谱，夹一下
+                if (w < 40) return 40;
+                if (w > 400) return 400;
+                return w;
             }
         }
     }
@@ -289,17 +313,86 @@ namespace KuroBBS.Models
         public int ReplyCount { get; set; }
         public string ReplyCountText { get { return ReplyCount > 0 ? string.Format("共 {0} 条回复", ReplyCount) : ""; } }
 
+        /// <summary>
+        /// 身份标签（来自 getPostCommentListV2 的 newIdentifyNames[]，回退 identifyNames 字符串）。
+        /// 例如「鸣潮WIKI成员」「摄影师」「攻略作者」「考据帝」。用于评论者名字后的身份徽标。
+        /// </summary>
+        public List<string> IdentifyNames { get; set; }
+        public bool HasIdentifyNames { get { return IdentifyNames != null && IdentifyNames.Count > 0; } }
+
+        /// <summary>身份标签的分类（identifyClassify，接口原样保留，暂只作数据字段）。</summary>
+        public int IdentifyClassify { get; set; }
+
+        /// <summary>是否为官方账号（isOfficial=1）。</summary>
+        public bool IsOfficial { get; set; }
+
+        /// <summary>是否为楼主/发布者（isPublisher=1）。</summary>
+        public bool IsPublisher { get; set; }
+
+        /// <summary>身份标签合并文本，供单行显示用（顿号分隔）。</summary>
+        public string IdentifyText
+        {
+            get
+            {
+                if (!HasIdentifyNames) return "";
+                return string.Join("、", IdentifyNames);
+            }
+        }
+
+        /// <summary>
+        /// 楼中楼是否还有更多回复未展开。getPostCommentListV2 只内联返回少量 replyVos，
+        /// 完整列表要走 /forum/comment/getReplyList 分页拉取。
+        /// 当 ReplyCount &gt; 已加载条数时置 true，UI 显示「展开更多回复」。
+        /// </summary>
+        private bool _hasMoreReplies;
+        public bool HasMoreReplies
+        {
+            get { return _hasMoreReplies; }
+            set { _hasMoreReplies = value; OnPropertyChanged(); OnPropertyChanged("ReplyExpandText"); }
+        }
+
+        /// <summary>「展开更多回复」按钮文案，附带剩余条数。</summary>
+        public string ReplyExpandText
+        {
+            get
+            {
+                int remain = ReplyCount - (Replies != null ? Replies.Count : 0);
+                return remain > 0 ? string.Format("展开更多回复（{0}）", remain) : "加载更多回复";
+            }
+        }
+
+        private bool _isLoadingReplies;
+        public bool IsLoadingReplies
+        {
+            get { return _isLoadingReplies; }
+            set { _isLoadingReplies = value; OnPropertyChanged(); }
+        }
+
+        /// <summary>
+        /// getReplyList 的分页游标，从 1 开始。
+        /// 第 1 页可能包含 commentList 已内联返回的 replyVos，服务端按 replyId 去重，重复项不会重复加入。
+        /// </summary>
+        public int ReplyPageIndex { get; set; }
+
         public PostCommentItem()
         {
             ContentRuns = new List<PostTextRun>();
             ImageList = new List<PostImage>();
             Replies = new List<PostReplyItem>();
+            IdentifyNames = new List<string>();
+            ReplyPageIndex = 1;
         }
 
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
         {
             if (PropertyChanged != null) PropertyChanged(this, new PropertyChangedEventArgs(propertyName));
+        }
+
+        /// <summary>供 ViewModel 主动触发通知（如补齐回复后刷新按钮文案）。</summary>
+        public void OnPropertyChangedPublic(string propertyName)
+        {
+            OnPropertyChanged(propertyName);
         }
     }
 
@@ -755,6 +848,69 @@ namespace KuroBBS.Models
         }
     }
 
+    public class UserFollowItem : INotifyPropertyChanged
+    {
+        public string UserId { get; set; }
+        public string UserName { get; set; }
+        public string AvatarUrl { get; set; }
+        public string HeadFrameUrl { get; set; }
+        public string Signature { get; set; }
+        public int FansCount { get; set; }
+        public int PostCount { get; set; }
+        public int IdentifyClassify { get; set; }
+        public List<string> IdentifyNames { get; set; }
+        public bool HasIdentityNames { get { return IdentifyNames != null && IdentifyNames.Count > 0; } }
+        public string IdentifyText { get { return HasIdentityNames ? string.Join("、", IdentifyNames) : ""; } }
+        public string StatsText { get { return string.Format("粉丝 {0} · 动态 {1}", FansCount, PostCount); } }
+        public bool MutualFollow { get; set; }
+
+        private bool _isFollow;
+        public bool IsFollow
+        {
+            get { return _isFollow; }
+            set
+            {
+                if (_isFollow != value)
+                {
+                    _isFollow = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged("FollowButtonText");
+                }
+            }
+        }
+
+        private bool _isUpdatingFollow;
+        public bool IsUpdatingFollow
+        {
+            get { return _isUpdatingFollow; }
+            set
+            {
+                if (_isUpdatingFollow != value)
+                {
+                    _isUpdatingFollow = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public string FollowButtonText { get { return IsFollow ? "已关注" : "关注"; } }
+
+        public UserFollowItem()
+        {
+            IdentifyNames = new List<string>();
+            Signature = "这个人很懒，还没有签名。";
+        }
+
+        public event PropertyChangedEventHandler PropertyChanged;
+        protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
+        {
+            if (PropertyChanged != null)
+            {
+                PropertyChanged(this, new PropertyChangedEventArgs(propertyName));
+            }
+        }
+    }
+
     public class UserSearchItem : INotifyPropertyChanged
     {
         public string UserId { get; set; }
@@ -1200,12 +1356,20 @@ namespace KuroBBS.Models
         public List<WikiSectionItem> Children { get; set; }
         public List<PostTextRun> Runs { get; set; }
 
+        /// <summary>
+        /// 段内「有序内容块」（文字 / 图片 / 标题）。
+        /// 只有它才能保证图片出现在正文里的正确位置 —— 以前一个 section 只存
+        /// 一张 ImageUrl + 一坨扁平 Runs，于是多图段落的图片全被挤到末尾。
+        /// </summary>
+        public List<PostContentBlock> Blocks { get; set; }
+
         public bool HasChildren { get { return Children != null && Children.Count > 0; } }
         public bool HasImage { get { return !string.IsNullOrEmpty(ImageUrl); } }
         public bool HasIcon { get { return !string.IsNullOrEmpty(IconUrl); } }
         public bool HasSubtitle { get { return !string.IsNullOrEmpty(Subtitle); } }
         public bool HasContent { get { return !string.IsNullOrEmpty(Content); } }
         public bool HasRuns { get { return Runs != null && Runs.Count > 0; } }
+        public bool HasBlocks { get { return Blocks != null && Blocks.Count > 0; } }
 
         private bool _isExpanded;
         public bool IsExpanded
@@ -1237,6 +1401,7 @@ namespace KuroBBS.Models
         {
             Children = new List<WikiSectionItem>();
             Runs = new List<PostTextRun>();
+            Blocks = new List<PostContentBlock>();
             _isExpanded = false;
         }
 
@@ -1656,6 +1821,14 @@ namespace KuroBBS.Models
         public List<string> ImageList { get; set; }
         public List<PostTextRun> Runs { get; set; }
 
+        /// <summary>
+        /// 非 tabs 组件（basic-component / text-component）正文里的 &lt;details&gt; 折叠树。
+        /// 例如「常见问题FAQ」「战斗系统」整篇都是 kr-collapse 折叠块，
+        /// 以前走扁平 Runs 解析，折叠结构丢失且图片全部错位到末尾。
+        /// </summary>
+        public ObservableCollection<WikiSectionItem> Sections { get; set; }
+        public bool HasSections { get { return Sections != null && Sections.Count > 0; } }
+
         private bool _isCollapsed;
         public bool IsCollapsed
         {
@@ -1859,7 +2032,10 @@ namespace KuroBBS.Models
 
         public bool IsSpecializedComponent
         {
-            get { return HasRoleInfo || HasTabs || HasStrategies || HasAudios || HasConsciousnessInfo; }
+            // HasSections 也算「专用版式」：一旦正文被解析成折叠树，
+            // 就不要再渲染扁平的 Runs / ImageList，否则内容会出现两遍、
+            // 且那一份扁平内容里的图片位置是错的。
+            get { return HasRoleInfo || HasTabs || HasStrategies || HasAudios || HasConsciousnessInfo || HasSections; }
         }
 
         public bool HasRoleInfo { get { return RoleInfo != null; } }
@@ -1878,6 +2054,7 @@ namespace KuroBBS.Models
             Strategies = new List<WikiStrategyItem>();
             AudioTabs = new List<WikiAudioTab>();
             Runs = new List<PostTextRun>();
+            Sections = new ObservableCollection<WikiSectionItem>();
         }
 
         public event PropertyChangedEventHandler PropertyChanged;

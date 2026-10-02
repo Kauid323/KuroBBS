@@ -202,11 +202,16 @@ namespace KuroBBS.Helpers
             string url = state.Url;
             int maxDecodeWidth = state.MaxDecodeWidth;
 
+            // 【关键】StartPlayback 一定运行在 UI 线程（属性变更回调 / Loaded 事件），
+            // 必须在进入后台任务之前把 Dispatcher 取出来带进去。
+            // 否则后台线程里访问 image.Dispatcher 会抛 RPC_E_WRONG_THREAD (0x8001010E)。
+            var dispatcher = image.Dispatcher;
+
             Task.Run(async () =>
             {
                 try
                 {
-                    await PlayGifInternalAsync(image, url, maxDecodeWidth, token);
+                    await PlayGifInternalAsync(dispatcher, image, url, maxDecodeWidth, token);
                 }
                 catch (Exception ex)
                 {
@@ -217,12 +222,16 @@ namespace KuroBBS.Helpers
 
         public static async Task TryPlayGifAsync(Image targetImage, string url, CancellationToken cancelToken, int maxDecodeWidth = 480)
         {
-            await PlayGifInternalAsync(targetImage, url, maxDecodeWidth, cancelToken);
+            if (targetImage == null) return;
+            // 属性回调（很可能在 UI 线程）上先取 dispatcher，再传入后台逻辑
+            var dispatcher = targetImage.Dispatcher;
+            await PlayGifInternalAsync(dispatcher, targetImage, url, maxDecodeWidth, cancelToken);
         }
 
-        private static async Task PlayGifInternalAsync(Image targetImage, string url, int maxDecodeWidth, CancellationToken cancelToken)
+        private static async Task PlayGifInternalAsync(CoreDispatcher dispatcher, Image targetImage, string url, int maxDecodeWidth, CancellationToken cancelToken)
         {
-            if (targetImage == null || string.IsNullOrWhiteSpace(url)) return;
+            if (string.IsNullOrWhiteSpace(url)) return;
+            if (dispatcher == null) return;
 
             try
             {
@@ -313,11 +322,11 @@ namespace KuroBBS.Helpers
 
                         // Switch image source to WriteableBitmap on UI thread
                         WriteableBitmap wb = null;
-                        await targetImage.Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
+                        await dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
                         {
                             if (cancelToken.IsCancellationRequested) return;
                             wb = new WriteableBitmap((int)targetW, (int)targetH);
-                            targetImage.Source = wb;
+                            if (targetImage != null) targetImage.Source = wb;
                         });
 
                         if (wb == null || cancelToken.IsCancellationRequested) return;
@@ -329,7 +338,7 @@ namespace KuroBBS.Helpers
                             var f = frames[currentFrame];
                             var fPixels = f.Pixels;
 
-                            await targetImage.Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
+                            await dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
                             {
                                 if (cancelToken.IsCancellationRequested) return;
                                 try
@@ -362,9 +371,9 @@ namespace KuroBBS.Helpers
                         // Clean up: release WriteableBitmap from Image.Source after loop exits
                         try
                         {
-                            await targetImage.Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
+                            await dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
                             {
-                                try { targetImage.Source = null; } catch { }
+                                try { if (targetImage != null) targetImage.Source = null; } catch { }
                             });
                         }
                         catch { }

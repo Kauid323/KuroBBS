@@ -87,18 +87,21 @@
 
             <GridView.ItemsPanel>
                 <ItemsPanelTemplate>
-                    <ItemsWrapGrid Orientation="Horizontal" ItemWidth="116" ItemHeight="152" />
+                    <ItemsWrapGrid Orientation="Horizontal"
+                                   ItemWidth="{Binding ItemWidth}"
+                                   ItemHeight="{Binding ItemHeight}"
+                                   MaximumRowsOrColumns="{Binding GridColumns}" />
                 </ItemsPanelTemplate>
             </GridView.ItemsPanel>
 
             <GridView.ItemTemplate>
                 <DataTemplate>
-                    <Grid Width="110" Height="146" Margin="2" Background="#1E1E26">
+                    <Grid Background="#1E1E26" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Margin="2">
                         <Border BorderBrush="#2C2C36" BorderThickness="1">
                             <Grid>
                                 <Grid.RowDefinitions>
-                                    <RowDefinition Height="100" />
                                     <RowDefinition Height="*" />
+                                    <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
 
                                 <!-- Item Thumbnail / Icon with compact 150px decode to prevent OOM -->

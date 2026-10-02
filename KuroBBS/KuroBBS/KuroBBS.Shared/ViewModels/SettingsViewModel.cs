@@ -28,7 +28,20 @@ namespace KuroBBS.ViewModels
             }
         }
 
-        public string ColumnSummary { get { return "全部角色页每行显示 " + AllRoleColumns + " 个"; } }
+        /// <summary>
+        /// 「每行显示数量」——全局列数别名，与 AllRoleColumns 同一个存储 key，
+        /// 给 WikiItemListPage / GoldShopPage 等列表页用，名字更贴切。
+        /// </summary>
+        public int GridColumns
+        {
+            get { return _allRoleColumns; }
+            set { AllRoleColumns = value; }
+        }
+
+        public string ColumnSummary
+        {
+            get { return "列表每行显示 " + AllRoleColumns + " 个（全部角色 / 图鉴与意识手册 / 金币商店）"; }
+        }
 
         public string CacheSizeSummary
         {

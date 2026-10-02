@@ -1,0 +1,146 @@
+<Page
+    x:Name="ShopPageRoot"
+    x:Class="KuroBBS.GoldShopPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:helpers="using:KuroBBS.Helpers"
+    xmlns:models="using:KuroBBS.Models"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+
+    <Grid>
+        <!-- 顶部进度条（Metro 原生） -->
+        <ProgressBar VerticalAlignment="Top" IsIndeterminate="{Binding IsBusy}"
+                     Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}"
+                     Foreground="{StaticResource MetroAccentBrush}" Canvas.ZIndex="99" />
+
+        <Grid Margin="16,0,16,12">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <!-- 页头 -->
+            <StackPanel Grid.Row="0" Margin="0,14,0,10">
+                <TextBlock Text="KURO · 金币商店" FontSize="11" Foreground="{StaticResource MetroAccentBrush}" FontWeight="SemiBold" />
+                <TextBlock Text="金币商店" FontSize="28" FontWeight="Light" Foreground="White" Margin="0,2,0,0" />
+            </StackPanel>
+
+            <!-- 余额 + 任务中心入口 -->
+            <Grid Grid.Row="1" Margin="0,0,0,10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <Border Grid.Column="0" Background="{StaticResource MetroCardBackgroundBrush}" Padding="14,10"
+                        BorderBrush="{StaticResource MetroGoldBrush}" BorderThickness="1">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="🪙" FontSize="22" VerticalAlignment="Center" Margin="0,0,10,0" />
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="我的库洛币" FontSize="11" Foreground="{StaticResource MetroSubTextBrush}" />
+                            <TextBlock Text="{Binding GoldText}" FontSize="22" FontWeight="Bold"
+                                       Foreground="{StaticResource MetroGoldBrush}" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <Button Grid.Column="1" Content="任务中心" Click="OnGoToTaskCenterClick"
+                        VerticalAlignment="Stretch" Margin="10,0,0,0"
+                        Background="{StaticResource MetroAccentBrush}" Foreground="White" FontWeight="SemiBold" />
+            </Grid>
+
+            <!-- 分类 Pivot：分类全部来自服务端 getKindInfo -->
+            <Pivot Grid.Row="2" x:Name="KindPivot" ItemsSource="{Binding Kinds}" SelectionChanged="OnKindSelectionChanged">
+                <Pivot.HeaderTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding Name}" FontSize="16" FontWeight="SemiBold" />
+                    </DataTemplate>
+                </Pivot.HeaderTemplate>
+
+                <Pivot.ItemTemplate>
+                    <DataTemplate>
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="*" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <ListView Grid.Row="0"
+                                      ItemsSource="{Binding DataContext.Commodities, ElementName=ShopPageRoot}"
+                                      SelectionMode="None" IsItemClickEnabled="True" ItemClick="OnCommodityItemClick">
+                                <ListView.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <!-- 列数 / 单元宽高跟随设置里的「每行显示数量」 -->
+                                        <WrapGrid Orientation="Horizontal"
+                                                   ItemWidth="{Binding DataContext.ItemWidth, ElementName=ShopPageRoot}"
+                                                   ItemHeight="{Binding DataContext.ItemHeight, ElementName=ShopPageRoot}"
+                                                   MaximumRowsOrColumns="{Binding DataContext.GridColumns, ElementName=ShopPageRoot}" />
+                                    </ItemsPanelTemplate>
+                                </ListView.ItemsPanel>
+
+                                <ListView.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Background="{StaticResource MetroCardBackgroundBrush}"
+                                                BorderBrush="#2C2C34" BorderThickness="1" Margin="0,0,6,6" Padding="8"
+                                                HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+                                            <Grid>
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="*" />
+                                                    <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
+                                                    <RowDefinition Height="Auto" />
+                                                </Grid.RowDefinitions>
+
+                                                <!-- 商品图：走懒加载 + 解码缩放，避免一次性吃掉大内存 -->
+                                                <Border Grid.Row="0" Background="#101016">
+                                                    <Image helpers:KuroLazyImage.SourceUrl="{Binding PictureUrl}"
+                                                           helpers:KuroLazyImage.DecodeWidth="240"
+                                                           Stretch="Uniform" />
+                                                </Border>
+
+                                                <TextBlock Grid.Row="1" Text="{Binding CommodityName}" FontSize="12" Foreground="White"
+                                                           TextWrapping="Wrap" MaxLines="2" Margin="0,6,0,2" MinHeight="34" />
+
+                                                <TextBlock Grid.Row="2" Text="{Binding PriceText}" FontSize="13" FontWeight="Bold"
+                                                           Foreground="{StaticResource MetroGoldBrush}" />
+
+                                                <TextBlock Grid.Row="3" Text="{Binding StockText}" FontSize="10"
+                                                           Foreground="{StaticResource MetroSubTextBrush}" Margin="0,2,0,0" />
+
+                                                <!-- 售罄遮罩 -->
+                                                <Border Grid.Row="0" Grid.RowSpan="4" Background="#B0000000"
+                                                        Visibility="{Binding CanBuy, Converter={StaticResource InvBoolToVis}}">
+                                                    <TextBlock Text="已兑完" FontSize="14" FontWeight="Bold" Foreground="White"
+                                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                </Border>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ListView.ItemTemplate>
+                            </ListView>
+
+                            <Button Grid.Row="1" Content="加载更多" HorizontalAlignment="Stretch" Margin="0,6,0,6"
+                                    Command="{Binding DataContext.LoadMoreCommand, ElementName=ShopPageRoot}"
+                                    Visibility="{Binding DataContext.HasMore, ElementName=ShopPageRoot, Converter={StaticResource BoolToVis}}" />
+
+                            <TextBlock Grid.Row="0" Text="该分类暂无商品" FontSize="13"
+                                       Foreground="{StaticResource MetroSubTextBrush}"
+                                       HorizontalAlignment="Center" Margin="0,20,0,0"
+                                       Visibility="{Binding DataContext.IsEmpty, ElementName=ShopPageRoot, Converter={StaticResource BoolToVis}}" />
+                        </Grid>
+                    </DataTemplate>
+                </Pivot.ItemTemplate>
+            </Pivot>
+        </Grid>
+
+        <!-- 状态提示 -->
+        <Border VerticalAlignment="Bottom" Background="#CC1A1A22" Padding="12,8"
+                Visibility="{Binding StatusMessage, Converter={StaticResource NullToVis}}">
+            <TextBlock Text="{Binding StatusMessage}" FontSize="12" Foreground="White" TextWrapping="Wrap" />
+        </Border>
+    </Grid>
+</Page>
