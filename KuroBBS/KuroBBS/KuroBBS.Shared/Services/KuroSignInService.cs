@@ -47,9 +47,9 @@ namespace KuroBBS.Services
             if (json != null && json.ContainsKey("data") && json.GetNamedValue("data").ValueType == JsonValueType.Object)
             {
                 var data = json.GetNamedObject("data");
-                status.IsSignedInToday = GetBoolean(data, "isSigIn", false) || GetBoolean(data, "isSignIn", false);
-                status.ConsecutiveDays = (int)GetNumber(data, "sigInNum", (int)GetNumber(data, "serialDays", 0));
-                status.TotalSignInDays = (int)GetNumber(data, "sigInNum", (int)GetNumber(data, "totalDays", 0));
+                status.IsSignedInToday = GetBoolean(data, "isSigIn", false) || GetBoolean(data, "isSignIn", false) || GetBoolean(data, "hasSignIn", false);
+                status.ConsecutiveDays = (int)GetNumber(data, "sigInNum", (int)GetNumber(data, "serialDays", (int)GetNumber(data, "continueDays", 0)));
+                status.TotalSignInDays = (int)GetNumber(data, "sigInNum", (int)GetNumber(data, "totalDays", status.ConsecutiveDays));
                 status.MonthTotalDays = (int)GetNumber(data, "monthTotalDays", 30);
                 status.ReplenishCardCount = (int)GetNumber(data, "replenishCardCount", (int)GetNumber(data, "replenishNum", 0));
 
@@ -72,15 +72,24 @@ namespace KuroBBS.Services
                     {
                         if (rVal.ValueType != JsonValueType.Object) continue;
                         var rObj = rVal.GetObject();
+                        int goodsNum = (int)GetNumber(rObj, "goodsNum", (int)GetNumber(rObj, "gainScore", 1));
+                        string gUrl = GetString(rObj, "goodsUrl", GetString(rObj, "url", GetString(rObj, "iconUrl", GetString(rObj, "imgUrl", ""))));
+                        string gName = GetString(rObj, "goodsName", GetString(rObj, "name", "物资补给"));
+                        bool isGained = GetBoolean(rObj, "isGain", false) 
+                                     || GetBoolean(rObj, "isSigIn", false) 
+                                     || GetBoolean(rObj, "isSignIn", false)
+                                     || (dayIdx <= status.TotalSignInDays);
+
                         status.MonthRecords.Add(new SignInDayInfo
                         {
-                            Date = dayIdx.ToString() + "日",
-                            DayNumber = dayIdx++,
-                            IsSignedIn = GetBoolean(rObj, "isGain", false) || GetBoolean(rObj, "isSigIn", false) || GetBoolean(rObj, "isSignIn", false),
-                            RewardName = GetString(rObj, "goodsName", "物资补给"),
-                            RewardIcon = GetString(rObj, "goodsUrl", ""),
-                            RewardCount = (int)GetNumber(rObj, "gainScore", (int)GetNumber(rObj, "goodsNum", 1))
+                            Date = dayIdx + "日",
+                            DayNumber = dayIdx,
+                            IsSignedIn = isGained,
+                            RewardName = gName,
+                            RewardIcon = gUrl,
+                            RewardCount = goodsNum
                         });
+                        dayIdx++;
                     }
                 }
                 else if (data.ContainsKey("records") && data.GetNamedValue("records").ValueType == JsonValueType.Array)
@@ -91,17 +100,49 @@ namespace KuroBBS.Services
                     {
                         if (rVal.ValueType != JsonValueType.Object) continue;
                         var rObj = rVal.GetObject();
+                        int goodsNum = (int)GetNumber(rObj, "goodsNum", (int)GetNumber(rObj, "gainScore", 1));
+                        string gUrl = GetString(rObj, "goodsUrl", GetString(rObj, "url", GetString(rObj, "iconUrl", GetString(rObj, "imgUrl", ""))));
+                        string gName = GetString(rObj, "goodsName", GetString(rObj, "name", "物资补给"));
+                        bool isGained = GetBoolean(rObj, "isSigIn", false) 
+                                     || GetBoolean(rObj, "isSignIn", false) 
+                                     || GetBoolean(rObj, "isGain", false)
+                                     || (dayIdx <= status.TotalSignInDays);
+
                         status.MonthRecords.Add(new SignInDayInfo
                         {
-                            Date = GetString(rObj, "date", dayIdx.ToString() + "日"),
-                            DayNumber = dayIdx++,
-                            IsSignedIn = GetBoolean(rObj, "isSigIn", false) || GetBoolean(rObj, "isSignIn", false) || GetBoolean(rObj, "isGain", false),
-                            RewardName = GetString(rObj, "goodsName", "物资补给"),
-                            RewardIcon = GetString(rObj, "goodsUrl", ""),
-                            RewardCount = (int)GetNumber(rObj, "gainScore", 1)
+                            Date = dayIdx + "日",
+                            DayNumber = dayIdx,
+                            IsSignedIn = isGained,
+                            RewardName = gName,
+                            RewardIcon = gUrl,
+                            RewardCount = goodsNum
                         });
+                        dayIdx++;
                     }
                 }
+            }
+
+            // Also check /user/signIn/info for user-level sign in state
+            try
+            {
+                var userSignInJson = await KuroApiClient.Instance.PostFormAsync("/user/signIn/info", new Dictionary<string, string> { { "gameId", gameId.ToString() } });
+                if (userSignInJson != null && userSignInJson.ContainsKey("data") && userSignInJson.GetNamedValue("data").ValueType == JsonValueType.Object)
+                {
+                    var uData = userSignInJson.GetNamedObject("data");
+                    bool hasSignIn = GetBoolean(uData, "hasSignIn", false);
+                    int continueDays = (int)GetNumber(uData, "continueDays", 0);
+                    if (hasSignIn)
+                    {
+                        status.IsSignedInToday = true;
+                    }
+                    if (continueDays > status.ConsecutiveDays)
+                    {
+                        status.ConsecutiveDays = continueDays;
+                    }
+                }
+            }
+            catch
+            {
             }
 
             return status;
@@ -211,6 +252,90 @@ namespace KuroBBS.Services
                 return (int)GetNumber(data, "totalGold", 0);
             }
             return 0;
+        }
+
+        public async Task<List<SignInClaimRecord>> QuerySignInRecordsAsync(int gameId, string serverId, string roleId, string userId)
+        {
+            var list = new List<SignInClaimRecord>();
+            try
+            {
+                var parameters = new Dictionary<string, string>
+                {
+                    { "gameId", gameId.ToString() },
+                    { "serverId", serverId ?? "" },
+                    { "roleId", roleId ?? "" },
+                    { "userId", userId ?? SettingsHelper.UserId }
+                };
+
+                var json = await KuroApiClient.Instance.PostFormAsync("/encourage/signIn/queryRecordV2", parameters);
+                if (json != null && json.ContainsKey("data") && json.GetNamedValue("data").ValueType == JsonValueType.Array)
+                {
+                    var arr = json.GetNamedArray("data");
+                    foreach (var val in arr)
+                    {
+                        if (val.ValueType == JsonValueType.Object)
+                        {
+                            var o = val.GetObject();
+                            list.Add(new SignInClaimRecord
+                            {
+                                GoodsId = GetString(o, "goodsId", ""),
+                                GoodsName = GetString(o, "goodsName", "补给物品"),
+                                GoodsNum = (int)GetNumber(o, "goodsNum", 1),
+                                GoodsUrl = GetString(o, "goodsUrl", ""),
+                                OrderCode = GetString(o, "orderCode", ""),
+                                SendState = GetBoolean(o, "sendState", true),
+                                SignInDate = GetString(o, "sigInDate", "")
+                            });
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                KuroLogger.Error("QUERY_SIGNIN_RECORDS_ERROR", "Error querying records: " + ex.Message);
+            }
+            return list;
+        }
+
+        public async Task<List<CommendFollowItem>> GetCommendFollowListAsync(int gameId, string serverId, string roleId, string userId)
+        {
+            var list = new List<CommendFollowItem>();
+            try
+            {
+                var parameters = new Dictionary<string, string>
+                {
+                    { "gameId", gameId.ToString() },
+                    { "serverId", serverId ?? "" },
+                    { "roleId", roleId ?? "" },
+                    { "userId", userId ?? SettingsHelper.UserId }
+                };
+
+                var json = await KuroApiClient.Instance.PostFormAsync("/encourage/signIn/commendFollow", parameters);
+                if (json != null && json.ContainsKey("data") && json.GetNamedValue("data").ValueType == JsonValueType.Array)
+                {
+                    var arr = json.GetNamedArray("data");
+                    foreach (var val in arr)
+                    {
+                        if (val.ValueType == JsonValueType.Object)
+                        {
+                            var o = val.GetObject();
+                            list.Add(new CommendFollowItem
+                            {
+                                UserId = GetString(o, "userId", ""),
+                                UserName = GetString(o, "userName", ""),
+                                UserHeadUrl = GetString(o, "userHeadUrl", ""),
+                                UserSign = GetString(o, "userSign", ""),
+                                IsFollow = GetBoolean(o, "isFollow", false)
+                            });
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                KuroLogger.Error("GET_COMMEND_FOLLOW_ERROR", "Error getting commend follows: " + ex.Message);
+            }
+            return list;
         }
 
         private string GetString(JsonObject obj, string key, string defVal)

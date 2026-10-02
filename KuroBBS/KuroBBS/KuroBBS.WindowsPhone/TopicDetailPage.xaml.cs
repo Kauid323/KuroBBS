@@ -5,6 +5,7 @@ using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Media;
 using Windows.UI.Xaml.Navigation;
 using KuroBBS.Models;
+using KuroBBS.Services;
 using KuroBBS.ViewModels;
 
 namespace KuroBBS
@@ -42,6 +43,25 @@ namespace KuroBBS
                         DiscussCnt = topicItem.DiscussCnt,
                         BrowseCnt = topicItem.BrowseCnt
                     };
+
+                    // If topicId is missing (e.g. hashtag tag from post), search to resolve its topicId
+                    if (string.IsNullOrEmpty(topicId) && !string.IsNullOrEmpty(topicItem.TopicName))
+                    {
+                        try
+                        {
+                            int gId = topicItem.GameId > 0 ? topicItem.GameId : 2;
+                            var searchList = await KuroForumService.Instance.SearchTopicsAsync(gId, topicItem.TopicName);
+                            if (searchList != null && searchList.Count > 0)
+                            {
+                                var matched = searchList.Find(t => string.Equals(t.TopicName, topicItem.TopicName, StringComparison.OrdinalIgnoreCase)) ?? searchList[0];
+                                topicId = matched.TopicId;
+                                ViewModel.Topic.TopicId = topicId;
+                                if (!string.IsNullOrEmpty(matched.TopicIcon)) ViewModel.Topic.TopicIcon = matched.TopicIcon;
+                                if (!string.IsNullOrEmpty(matched.Remark)) ViewModel.Topic.Remark = matched.Remark;
+                            }
+                        }
+                        catch { }
+                    }
                 }
                 else
                 {

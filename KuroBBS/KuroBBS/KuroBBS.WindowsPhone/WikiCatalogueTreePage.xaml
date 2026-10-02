@@ -1,0 +1,89 @@
+<Page
+    x:Name="WikiTreeRoot"
+    x:Class="KuroBBS.WikiCatalogueTreePage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:helpers="using:KuroBBS.Helpers"
+    xmlns:models="using:KuroBBS.Models"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+
+    <Page.BottomAppBar>
+        <CommandBar Background="#121216" ClosedDisplayMode="Minimal" IsOpen="False">
+            <AppBarButton Icon="Back" Label="返回" Click="OnBackClick" />
+            <AppBarButton Icon="Refresh" Label="刷新" Click="OnRefreshClick" />
+        </CommandBar>
+    </Page.BottomAppBar>
+
+    <Grid>
+        <!-- Native Progress Indicator -->
+        <ProgressBar VerticalAlignment="Top" IsIndeterminate="{Binding IsBusy}"
+                     Visibility="{Binding IsBusy, Converter={StaticResource BoolToVis}}"
+                     Foreground="{StaticResource MetroAccentBrush}" Canvas.ZIndex="99" />
+
+        <Grid Margin="16,0,16,0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <!-- Metro Page Title Area -->
+            <StackPanel Margin="0,14,0,12">
+                <TextBlock Text="KURO WIKI · 目录索引" FontSize="11" Foreground="{StaticResource MetroAccentBrush}" FontWeight="SemiBold" />
+                <TextBlock Text="{Binding GameTitle}" FontSize="28" FontWeight="Light" Foreground="White" Margin="0,2,0,0" />
+            </StackPanel>
+
+            <!-- Top Category Tabs (Horizontal Scroll / Items) -->
+            <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Margin="0,0,0,12">
+                <ItemsControl ItemsSource="{Binding RootCategories}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Button Content="{Binding Name}" Margin="0,0,8,0" Tapped="OnRootCategoryTapped" Tag="{Binding}"
+                                    Background="#1E1E26" Foreground="White" BorderBrush="#2F2F3B" BorderThickness="1"
+                                    Padding="14,6" FontSize="13" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+
+            <!-- Subcategories List / Grid -->
+            <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <StackPanel Margin="0,0,0,24">
+                    <TextBlock Text="{Binding SelectedCategory.Name}" FontSize="18" FontWeight="SemiBold" Foreground="White" Margin="0,0,0,12" />
+                    
+                    <ItemsControl ItemsSource="{Binding DisplayNodes}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="0,0,0,8" Background="#1E1E26" Tapped="OnCatalogueNodeTapped" Tag="{Binding}">
+                                    <Border BorderBrush="#2C2C36" BorderThickness="1" Padding="14,12">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding Name}" FontSize="15" FontWeight="SemiBold" Foreground="White" />
+                                                <TextBlock Text="{Binding Children.Count, Converter={StaticResource StringFormatConverter}, ConverterParameter='包含 {0} 个子分类'}"
+                                                           FontSize="12" Foreground="{StaticResource MetroSubTextBrush}" Margin="0,3,0,0"
+                                                           Visibility="{Binding HasChildren, Converter={StaticResource BoolToVis}}" />
+                                            </StackPanel>
+                                            <SymbolIcon Grid.Column="1" Symbol="Forward" Foreground="{StaticResource MetroSubTextBrush}" VerticalAlignment="Center" />
+                                        </Grid>
+                                    </Border>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+    </Grid>
+</Page>

@@ -87,6 +87,8 @@
             <Grid.RowDefinitions>
                 <!-- Title Row -->
                 <RowDefinition Height="Auto" />
+                <!-- Selected Topics Strip (if any) -->
+                <RowDefinition Height="Auto" />
                 <!-- Attached Images Horizontal Strip (if any) -->
                 <RowDefinition Height="Auto" />
                 <!-- Giant Content Body / Preview -->
@@ -103,10 +105,33 @@
                 <TextBlock Grid.Column="1" Text="{Binding TitleCountText}" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center" Margin="6,0,4,0" />
             </Grid>
 
+            <!-- Selected Topics Horizontal Tag Chips Strip (Ultra-compact, length auto-adaptive) -->
+            <Border Grid.Row="1" Visibility="{Binding HasSelectedTopics, Converter={StaticResource BooleanToVisibilityConverter}}" Margin="0,0,0,4">
+                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" IsTabStop="False">
+                    <ItemsControl ItemsSource="{Binding SelectedTopics}" IsTabStop="False">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal" />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,0">
+                                    <TextBlock Text="{Binding FormattedTag}" FontSize="11" Foreground="{StaticResource AccentTealBrush}" VerticalAlignment="Center" />
+                                    <Button Click="OnDeleteSelectedTopicClick" Tag="{Binding}" Background="Transparent" BorderThickness="0" Padding="3,0,0,0" Margin="1,-1,0,0" VerticalAlignment="Center" MinWidth="0" MinHeight="0" IsTabStop="False">
+                                        <TextBlock Text="✕" FontSize="9" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center" />
+                                    </Button>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Border>
+
             <!-- Minimal Attached Images Horizontal Strip -->
-            <Border Grid.Row="1" Visibility="{Binding HasAttachedImages, Converter={StaticResource BooleanToVisibilityConverter}}" Margin="0,0,0,8" Height="68">
-                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-                    <ItemsControl ItemsSource="{Binding AttachedImages}">
+            <Border Grid.Row="2" Visibility="{Binding HasAttachedImages, Converter={StaticResource BooleanToVisibilityConverter}}" Margin="0,0,0,8" Height="68">
+                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" IsTabStop="False">
+                    <ItemsControl ItemsSource="{Binding AttachedImages}" IsTabStop="False">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
                                 <StackPanel Orientation="Horizontal" />
@@ -115,11 +140,11 @@
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
                                 <Grid Width="60" Height="60" Margin="0,0,8,0">
-                                    <Border Background="#161616" BorderBrush="#333333" BorderThickness="1" CornerRadius="2">
+                                    <Border Background="#161616" BorderBrush="#333333" BorderThickness="1">
                                         <Image Source="{Binding Url}" Stretch="UniformToFill" />
                                     </Border>
                                     <!-- Delete Badge -->
-                                    <Button Click="OnDeleteImageClick" Tag="{Binding}" HorizontalAlignment="Right" VerticalAlignment="Top" Width="20" Height="20" Background="#CCFF453A" BorderThickness="0" Padding="0" Margin="0">
+                                    <Button Click="OnDeleteImageClick" Tag="{Binding}" HorizontalAlignment="Right" VerticalAlignment="Top" Width="20" Height="20" Background="#CCFF453A" BorderThickness="0" Padding="0" Margin="0" IsTabStop="False">
                                         <TextBlock Text="✕" FontSize="10" FontWeight="Bold" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" />
                                     </Button>
                                 </Grid>
@@ -130,10 +155,10 @@
             </Border>
 
             <!-- Giant Content Body TextBox (Fills All Remaining Screen!) -->
-            <TextBox x:Name="ContentTextBox" Grid.Row="2" Text="{Binding Content, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="分享你的心得、攻略或同人创作..." AcceptsReturn="True" TextWrapping="Wrap" VerticalAlignment="Stretch" HorizontalAlignment="Stretch" FontSize="15" Background="Transparent" Foreground="#EFEFEF" BorderThickness="0" Padding="2,4" GotFocus="OnContentTextBoxGotFocus" LostFocus="OnContentTextBoxLostFocus" Visibility="{Binding IsPreviewMode, Converter={StaticResource InverseBooleanToVisibilityConverter}}" />
+            <TextBox x:Name="ContentTextBox" Grid.Row="3" Text="{Binding Content, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" PlaceholderText="分享你的心得、攻略或同人创作..." AcceptsReturn="True" TextWrapping="Wrap" VerticalAlignment="Stretch" HorizontalAlignment="Stretch" FontSize="15" Background="Transparent" Foreground="#EFEFEF" BorderThickness="0" Padding="2,4" GotFocus="OnContentTextBoxGotFocus" LostFocus="OnContentTextBoxLostFocus" Visibility="{Binding IsPreviewMode, Converter={StaticResource InverseBooleanToVisibilityConverter}}" />
 
             <!-- Rich Preview Container (When Preview Mode is active) -->
-            <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" Visibility="{Binding IsPreviewMode, Converter={StaticResource BooleanToVisibilityConverter}}">
+            <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto" Visibility="{Binding IsPreviewMode, Converter={StaticResource BooleanToVisibilityConverter}}" IsTabStop="False">
                 <StackPanel Margin="2,4">
                     <TextBlock Text="📱 帖子渲染预览" FontSize="13" FontWeight="Bold" Foreground="{StaticResource AccentTealBrush}" Margin="0,0,0,8" />
                     <TextBlock Text="{Binding Title}" FontSize="18" FontWeight="Bold" Foreground="White" TextWrapping="Wrap" Margin="0,0,0,10" />
@@ -142,7 +167,7 @@
                         <!-- Populated dynamically via KuroHtmlPostParser -->
                     </RichTextBlock>
 
-                    <ItemsControl ItemsSource="{Binding AttachedImages}">
+                    <ItemsControl ItemsSource="{Binding AttachedImages}" IsTabStop="False">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
                                 <Border Margin="0,0,0,10" BorderBrush="#222222" BorderThickness="1">
@@ -168,14 +193,14 @@
             <Border x:Name="ColorStripPanel" Grid.Row="0" Visibility="Collapsed" Background="#161616" BorderBrush="{StaticResource ToolbarBorderBrush}" BorderThickness="0,1,0,0" Padding="12,8">
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                     <TextBlock Text="字体颜色: " FontSize="12" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center" Margin="0,0,8,0" />
-                    <Button Click="OnApplyPresetColorClick" Tag="#00D9CA" Background="#00D9CA" Width="32" Height="26" Margin="0,0,6,0" BorderThickness="0" />
-                    <Button Click="OnApplyPresetColorClick" Tag="#C5A9F6" Background="#C5A9F6" Width="32" Height="26" Margin="0,0,6,0" BorderThickness="0" />
-                    <Button Click="OnApplyPresetColorClick" Tag="#FF453A" Background="#FF453A" Width="32" Height="26" Margin="0,0,6,0" BorderThickness="0" />
-                    <Button Click="OnApplyPresetColorClick" Tag="#FF9500" Background="#FF9500" Width="32" Height="26" Margin="0,0,6,0" BorderThickness="0" />
-                    <Button Click="OnApplyPresetColorClick" Tag="#FFD700" Background="#FFD700" Width="32" Height="26" Margin="0,0,6,0" BorderThickness="0" />
-                    <Button Click="OnApplyPresetColorClick" Tag="#30D158" Background="#30D158" Width="32" Height="26" Margin="0,0,6,0" BorderThickness="0" />
-                    <Button Click="OnApplyPresetColorClick" Tag="#FFFFFF" Background="#FFFFFF" Width="32" Height="26" Margin="0,0,6,0" BorderThickness="0" />
-                    <Button Click="OnCloseColorPanelClick" Background="Transparent" BorderThickness="0" Padding="6,2">
+                    <Button Click="OnApplyPresetColorClick" Tag="#00D9CA" Background="#00D9CA" Width="32" Height="26" Margin="0,0,6,0" BorderThickness="0" IsTabStop="False" />
+                    <Button Click="OnApplyPresetColorClick" Tag="#C5A9F6" Background="#C5A9F6" Width="32" Height="26" Margin="0,0,6,0" BorderThickness="0" IsTabStop="False" />
+                    <Button Click="OnApplyPresetColorClick" Tag="#FF453A" Background="#FF453A" Width="32" Height="26" Margin="0,0,6,0" BorderThickness="0" IsTabStop="False" />
+                    <Button Click="OnApplyPresetColorClick" Tag="#FF9500" Background="#FF9500" Width="32" Height="26" Margin="0,0,6,0" BorderThickness="0" IsTabStop="False" />
+                    <Button Click="OnApplyPresetColorClick" Tag="#FFD700" Background="#FFD700" Width="32" Height="26" Margin="0,0,6,0" BorderThickness="0" IsTabStop="False" />
+                    <Button Click="OnApplyPresetColorClick" Tag="#30D158" Background="#30D158" Width="32" Height="26" Margin="0,0,6,0" BorderThickness="0" IsTabStop="False" />
+                    <Button Click="OnApplyPresetColorClick" Tag="#FFFFFF" Background="#FFFFFF" Width="32" Height="26" Margin="0,0,6,0" BorderThickness="0" IsTabStop="False" />
+                    <Button Click="OnCloseColorPanelClick" Background="Transparent" BorderThickness="0" Padding="6,2" IsTabStop="False">
                         <TextBlock Text="✕" FontSize="12" Foreground="{StaticResource TextMutedBrush}" />
                     </Button>
                 </StackPanel>
@@ -191,8 +216,8 @@
 
                     <!-- Emoji Package Tabs + Close -->
                     <Grid Grid.Row="0" Margin="0,0,0,6">
-                        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Margin="0,0,40,0">
-                            <ItemsControl ItemsSource="{Binding EmojiPackages}">
+                        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Margin="0,0,40,0" IsTabStop="False">
+                            <ItemsControl ItemsSource="{Binding EmojiPackages}" IsTabStop="False">
                                 <ItemsControl.ItemsPanel>
                                     <ItemsPanelTemplate>
                                         <StackPanel Orientation="Horizontal" />
@@ -200,20 +225,20 @@
                                 </ItemsControl.ItemsPanel>
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <Button Click="OnSelectEmojiPackageClick" Tag="{Binding}" Margin="0,0,6,0" Background="#222222" BorderThickness="0" Padding="8,3">
+                                        <Button Click="OnSelectEmojiPackageClick" Tag="{Binding}" Margin="0,0,6,0" Background="#222222" BorderThickness="0" Padding="8,3" IsTabStop="False">
                                             <TextBlock Text="{Binding PackageName}" FontSize="11" Foreground="White" />
                                         </Button>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
                         </ScrollViewer>
-                        <Button Click="OnCloseEmojiPanelClick" HorizontalAlignment="Right" Background="Transparent" BorderThickness="0" Padding="6,2">
+                        <Button Click="OnCloseEmojiPanelClick" HorizontalAlignment="Right" Background="Transparent" BorderThickness="0" Padding="6,2" IsTabStop="False">
                             <TextBlock Text="✕" FontSize="14" Foreground="{StaticResource TextMutedBrush}" />
                         </Button>
                     </Grid>
 
                     <!-- Emoji Grid -->
-                    <GridView Grid.Row="1" ItemsSource="{Binding SelectedEmojiPackage.Emojis}" ItemClick="OnEmojiItemClick" IsItemClickEnabled="True" SelectionMode="None">
+                    <GridView Grid.Row="1" ItemsSource="{Binding SelectedEmojiPackage.Emojis}" ItemClick="OnEmojiItemClick" IsItemClickEnabled="True" SelectionMode="None" IsTabStop="False">
                         <GridView.ItemsPanel>
                             <ItemsPanelTemplate>
                                 <WrapGrid Orientation="Horizontal" MaximumRowsOrColumns="5" />
@@ -221,7 +246,7 @@
                         </GridView.ItemsPanel>
                         <GridView.ItemTemplate>
                             <DataTemplate>
-                                <Border Width="56" Height="56" Background="#0A0A0A" Margin="2" CornerRadius="2">
+                                <Border Width="56" Height="56" Background="#0A0A0A" Margin="2">
                                     <Image Source="{Binding ImgUrl}" Width="44" Height="44" Stretch="Uniform" VerticalAlignment="Center" HorizontalAlignment="Center" />
                                 </Border>
                             </DataTemplate>
@@ -230,44 +255,121 @@
                 </Grid>
             </Border>
 
+            <!-- Topic Picker Drawer (Docked above toolbar - Clean Metro Flat) -->
+            <Border x:Name="TopicPickerPanel" Grid.Row="0" Visibility="Collapsed" Background="#141414" BorderBrush="{StaticResource ToolbarBorderBrush}" BorderThickness="0,1,0,0" Height="240" Padding="8,6">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <!-- Top Search Bar -->
+                        <RowDefinition Height="Auto" />
+                        <!-- Loading Indicator -->
+                        <RowDefinition Height="Auto" />
+                        <!-- Topics List -->
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <!-- Top Search Bar + Close Button -->
+                    <Grid Grid.Row="0" Margin="0,0,0,6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Search Input -->
+                        <TextBox x:Name="TopicSearchTextBox" Grid.Column="0" PlaceholderText="搜索话题..." FontSize="12" Background="Transparent" Foreground="White" BorderBrush="#333333" BorderThickness="0,0,0,1" Height="32" Padding="4,4" KeyDown="OnTopicSearchTextBoxKeyDown" />
+
+                        <!-- Search Button -->
+                        <Button Grid.Column="1" Click="OnSearchTopicClick" Background="Transparent" BorderThickness="0" Height="32" Padding="8,0" Margin="4,0,0,0" IsTabStop="False">
+                            <TextBlock Text="搜索" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource AccentTealBrush}" VerticalAlignment="Center" />
+                        </Button>
+
+                        <!-- Close Drawer Button -->
+                        <Button Grid.Column="2" Click="OnCloseTopicPanelClick" Background="Transparent" BorderThickness="0" Padding="6,2" Margin="2,0,0,0" IsTabStop="False">
+                            <TextBlock Text="✕" FontSize="14" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center" />
+                        </Button>
+                    </Grid>
+
+                    <!-- Loading bar -->
+                    <ProgressBar Grid.Row="1" IsIndeterminate="True" Foreground="{StaticResource AccentTealBrush}" Visibility="{Binding IsLoadingTopics, Converter={StaticResource BooleanToVisibilityConverter}}" Height="2" Margin="0,0,0,4" />
+
+                    <!-- Topics ListView -->
+                    <ListView Grid.Row="2" ItemsSource="{Binding AvailableTopics}" SelectionMode="None" IsTabStop="False">
+                        <ListView.ItemContainerStyle>
+                            <Style TargetType="ListViewItem">
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                <Setter Property="Margin" Value="0,0,0,2" />
+                                <Setter Property="Padding" Value="0" />
+                            </Style>
+                        </ListView.ItemContainerStyle>
+                        <ListView.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="Transparent" BorderBrush="#1C1C1C" BorderThickness="0,0,0,1" Padding="4,6" Tapped="OnTopicListItemTapped" Tag="{Binding}">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <!-- Topic Icon -->
+                                        <Border Grid.Column="0" Width="32" Height="32" Background="#181818" Margin="0,0,8,0">
+                                            <Image Source="{Binding TopicIcon, Converter={StaticResource ImageCacheConverter}}" Stretch="UniformToFill" />
+                                        </Border>
+
+                                        <!-- Topic Details -->
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding FormattedTag}" FontSize="12" FontWeight="SemiBold" Foreground="White" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Text="{Binding SummaryText}" FontSize="10" Foreground="{StaticResource TextMutedBrush}" TextTrimming="CharacterEllipsis" MaxLines="1" Margin="0,1,0,0" />
+                                        </StackPanel>
+
+                                        <!-- Select Text (No rounded corners, no background) -->
+                                        <TextBlock Grid.Column="2" Text="+ 选择" FontSize="11" Foreground="{StaticResource AccentTealBrush}" VerticalAlignment="Center" Margin="4,0,2,0" />
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+                </Grid>
+            </Border>
+
             <!-- Slim Keyboard-Docked Action Strip -->
             <Border Grid.Row="1" Background="#111111" Height="42" BorderBrush="{StaticResource ToolbarBorderBrush}" BorderThickness="0,1,0,0">
-                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" IsTabStop="False">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="4,0">
                         <!-- Add Image Directly on Toolbar -->
-                        <Button Click="OnAddImageClick" Background="Transparent" BorderThickness="0" Padding="8,4">
+                        <Button Click="OnAddImageClick" Background="Transparent" BorderThickness="0" Padding="8,4" IsTabStop="False">
                             <TextBlock Text="📷" FontSize="16" Foreground="White" />
                         </Button>
                         <!-- Kuro Emojis -->
-                        <Button Click="OnEmojiPickerToggleClick" Background="Transparent" BorderThickness="0" Padding="8,4">
+                        <Button Click="OnEmojiPickerToggleClick" Background="Transparent" BorderThickness="0" Padding="8,4" IsTabStop="False">
                             <TextBlock Text="😊" FontSize="16" Foreground="{StaticResource AccentTealBrush}" />
                         </Button>
                         <!-- Color Palette -->
-                        <Button Click="OnColorPickerToggleClick" Background="Transparent" BorderThickness="0" Padding="8,4">
+                        <Button Click="OnColorPickerToggleClick" Background="Transparent" BorderThickness="0" Padding="8,4" IsTabStop="False">
                             <TextBlock Text="🎨" FontSize="16" Foreground="{StaticResource AccentTealBrush}" />
                         </Button>
                         <!-- Bold -->
-                        <Button Click="OnFormatBoldClick" Background="Transparent" BorderThickness="0" Padding="8,4">
+                        <Button Click="OnFormatBoldClick" Background="Transparent" BorderThickness="0" Padding="8,4" IsTabStop="False">
                             <TextBlock Text="B" FontWeight="Bold" FontSize="14" Foreground="White" />
                         </Button>
                         <!-- Italic -->
-                        <Button Click="OnFormatItalicClick" Background="Transparent" BorderThickness="0" Padding="8,4">
+                        <Button Click="OnFormatItalicClick" Background="Transparent" BorderThickness="0" Padding="8,4" IsTabStop="False">
                             <TextBlock Text="I" FontStyle="Italic" FontSize="14" Foreground="White" />
                         </Button>
                         <!-- Underline -->
-                        <Button Click="OnFormatUnderlineClick" Background="Transparent" BorderThickness="0" Padding="8,4">
+                        <Button Click="OnFormatUnderlineClick" Background="Transparent" BorderThickness="0" Padding="8,4" IsTabStop="False">
                             <TextBlock Text="U" FontSize="14" Foreground="White" />
                         </Button>
                         <!-- Heading -->
-                        <Button Click="OnFormatHeadingClick" Background="Transparent" BorderThickness="0" Padding="8,4">
+                        <Button Click="OnFormatHeadingClick" Background="Transparent" BorderThickness="0" Padding="8,4" IsTabStop="False">
                             <TextBlock Text="H" FontSize="14" FontWeight="Bold" Foreground="White" />
                         </Button>
                         <!-- Topic Tag -->
-                        <Button Click="OnInsertTopicClick" Background="Transparent" BorderThickness="0" Padding="8,4">
+                        <Button Click="OnInsertTopicClick" Background="Transparent" BorderThickness="0" Padding="8,4" IsTabStop="False">
                             <TextBlock Text="#" FontSize="15" FontWeight="Bold" Foreground="{StaticResource AccentTealBrush}" />
                         </Button>
                         <!-- Preview Mode Toggle -->
-                        <Button Click="OnTogglePreviewClick" Background="Transparent" BorderThickness="0" Padding="8,4">
+                        <Button Click="OnTogglePreviewClick" Background="Transparent" BorderThickness="0" Padding="8,4" IsTabStop="False">
                             <TextBlock Text="👁️" FontSize="16" Foreground="White" />
                         </Button>
                     </StackPanel>

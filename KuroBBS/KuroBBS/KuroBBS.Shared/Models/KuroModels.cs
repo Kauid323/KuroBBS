@@ -1,7 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using Windows.UI;
+using Windows.UI.Xaml;
+using Windows.UI.Xaml.Media;
 
 namespace KuroBBS.Models
 {
@@ -49,6 +53,8 @@ namespace KuroBBS.Models
         public string TargetId { get; set; }
         public bool IsBold { get; set; }
         public bool IsItalic { get; set; }
+        public bool IsUnderline { get; set; }
+        public bool IsStrikethrough { get; set; }
         public string ColorHex { get; set; }
         public double? FontSize { get; set; }
     }
@@ -319,6 +325,55 @@ namespace KuroBBS.Models
         public string RewardName { get; set; }
         public string RewardIcon { get; set; }
         public int RewardCount { get; set; }
+        public string RewardCountDisplay
+        {
+            get { return RewardCount > 0 ? "x" + RewardCount : ""; }
+        }
+        public string StatusText
+        {
+            get { return IsSignedIn ? "已领取" : (IsCurrentDay ? "今日可领" : ""); }
+        }
+    }
+
+    public class SignInClaimRecord
+    {
+        public string GoodsId { get; set; }
+        public string GoodsName { get; set; }
+        public int GoodsNum { get; set; }
+        public string GoodsUrl { get; set; }
+        public string OrderCode { get; set; }
+        public bool SendState { get; set; }
+        public string SignInDate { get; set; }
+        public string GoodsNumText { get { return "x" + GoodsNum; } }
+    }
+
+    public class CommendFollowItem : INotifyPropertyChanged
+    {
+        public string UserId { get; set; }
+        public string UserName { get; set; }
+        public string UserHeadUrl { get; set; }
+        public string UserSign { get; set; }
+        private bool _isFollow;
+        public bool IsFollow
+        {
+            get { return _isFollow; }
+            set
+            {
+                if (_isFollow != value)
+                {
+                    _isFollow = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged("FollowBtnText");
+                }
+            }
+        }
+        public string FollowBtnText { get { return _isFollow ? "已关注" : "+ 关注"; } }
+
+        public event PropertyChangedEventHandler PropertyChanged;
+        protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
+        {
+            if (PropertyChanged != null) PropertyChanged(this, new PropertyChangedEventArgs(propertyName));
+        }
     }
 
     public class SignInStatus
@@ -606,6 +661,41 @@ namespace KuroBBS.Models
         {
             get { return string.IsNullOrEmpty(BrowseCnt) ? "0 浏览" : BrowseCnt + " 浏览"; }
         }
+
+        public string FormattedTag
+        {
+            get { return "#" + TopicName + "#"; }
+        }
+
+        public string SummaryText
+        {
+            get
+            {
+                if (!string.IsNullOrWhiteSpace(Remark)) return Remark;
+                return string.Format("{0} · {1}", DiscussCountText, BrowseCountText);
+            }
+        }
+    }
+
+    public class GameWikiItem
+    {
+        public int Id { get; set; }
+        public string WikiName { get; set; }
+        public int WikiType { get; set; }
+        public string IconUrl { get; set; }
+        public string WebIconUrl { get; set; }
+        public string DisplayIcon
+        {
+            get { return !string.IsNullOrEmpty(IconUrl) ? IconUrl : WebIconUrl; }
+        }
+        public string Url { get; set; }
+        public string CustomSchemeUrl { get; set; }
+        public string PostId { get; set; }
+        public string PostTitle { get; set; }
+        public bool ShowRedPoint { get; set; }
+        public bool AppForce { get; set; }
+        public int IsNeedToken { get; set; }
+        public int GameId { get; set; }
     }
 
     public class WikiSearchItem
@@ -747,4 +837,1008 @@ namespace KuroBBS.Models
             Emojis = new List<EmojiEntryItem>();
         }
     }
+
+    #region Kuro Wiki Models
+
+    public class WikiBannerItem
+    {
+        public string Title { get; set; }
+        public string Describe { get; set; }
+        public string Url { get; set; }
+        public int LinkType { get; set; }
+        public int CatalogueId { get; set; }
+        public string EntryId { get; set; }
+        public string LinkUrl { get; set; }
+        public bool Active { get; set; }
+    }
+
+    public class WikiShortcutItem
+    {
+        public string Title { get; set; }
+        public string IconUrl { get; set; }
+        public string IconGlyph { get; set; }
+        public int CatalogueId { get; set; }
+        public string EntryId { get; set; }
+        public string LinkUrl { get; set; }
+        public int LinkType { get; set; }
+    }
+
+    public class WikiAnnouncementItem
+    {
+        public string Name { get; set; }
+        public string Title { get; set; }
+        public string Content { get; set; }
+        public string ImgUrl { get; set; }
+        public string LinkUrl { get; set; }
+        public int LinkType { get; set; }
+        public bool Active { get; set; }
+    }
+
+    public class WikiContributorItem
+    {
+        public string Uid { get; set; }
+        public string UserName { get; set; }
+        public string UserHeadUrl { get; set; }
+        public string UserCenterUrl { get; set; }
+        public string Score { get; set; }
+        public int Sort { get; set; }
+        public string RankDisplay
+        {
+            get { return "TOP " + (Sort + 1); }
+        }
+    }
+
+    public class WikiCatalogueNode
+    {
+        public int Id { get; set; }
+        public int Key { get; set; }
+        public string Name { get; set; }
+        public int ParentId { get; set; }
+        public int Level { get; set; }
+        public int Sort { get; set; }
+        public List<WikiCatalogueNode> Children { get; set; }
+        public bool HasChildren { get { return Children != null && Children.Count > 0; } }
+        public bool IsLeaf { get { return !HasChildren; } }
+
+        public WikiCatalogueNode()
+        {
+            Children = new List<WikiCatalogueNode>();
+        }
+    }
+
+    public class WikiItemRecord
+    {
+        public int Id { get; set; }
+        public string Name { get; set; }
+        public string EntryId { get; set; }
+        public string IconUrl { get; set; }
+        public string CornerMarkUrl { get; set; }
+        public string Level { get; set; }
+        public List<string> RelateTagIds { get; set; }
+        public string Title { get; set; }
+        public string SubTitle { get; set; }
+        public int CatalogueId { get; set; }
+        public int LinkType { get; set; }
+        public string LinkUrl { get; set; }
+
+        public string LevelDisplay
+        {
+            get
+            {
+                if (!string.IsNullOrEmpty(Level)) return Level;
+                return "";
+            }
+        }
+
+        public string LevelColor
+        {
+            get
+            {
+                if (Level == "S" || Level == "5★" || Level == "SSR" || Level == "金色" || Level == "6★") return "#FFD700";
+                if (Level == "A" || Level == "4★" || Level == "SR" || Level == "紫色" || Level == "5星") return "#A335EE";
+                if (Level == "B" || Level == "3★" || Level == "R" || Level == "蓝色" || Level == "4星") return "#0070DD";
+                return "#007ACC";
+            }
+        }
+
+        public WikiItemRecord()
+        {
+            RelateTagIds = new List<string>();
+        }
+    }
+
+    public class WikiTagNode
+    {
+        public int Id { get; set; }
+        public string Name { get; set; }
+        public int Level { get; set; }
+        public List<WikiTagNode> Children { get; set; }
+        public bool IsSelected { get; set; }
+
+        public WikiTagNode()
+        {
+            Children = new List<WikiTagNode>();
+        }
+    }
+
+    public class WikiRoleStatItem
+    {
+        public string Name { get; set; }
+        public string MinValue { get; set; }
+        public string MaxValue { get; set; }
+        public string DisplayValue
+        {
+            get
+            {
+                if (!string.IsNullOrEmpty(MinValue) && !string.IsNullOrEmpty(MaxValue) && MinValue != MaxValue)
+                    return MinValue + " ~ " + MaxValue;
+                return !string.IsNullOrEmpty(MaxValue) ? MaxValue : MinValue;
+            }
+        }
+    }
+
+    public class WikiKeyValueItem
+    {
+        public string Key { get; set; }
+        public string Value { get; set; }
+
+        public WikiKeyValueItem() { }
+        public WikiKeyValueItem(string key, string value)
+        {
+            Key = key;
+            Value = value;
+        }
+    }
+
+    public class WikiRoleGearItem
+    {
+        public string Title { get; set; }
+        public string Name { get; set; }
+        public string ImgUrl { get; set; }
+        public string EntryId { get; set; }
+        public int LinkType { get; set; }
+        public bool HasLink { get { return !string.IsNullOrEmpty(EntryId) && EntryId != "0"; } }
+    }
+
+    public class WikiRoleCardInfo
+    {
+        public string Title { get; set; }
+        public string Subtitle { get; set; }
+        public string RobotType { get; set; }
+        public string RobotTypeImage { get; set; }
+        public string RoleAvatar { get; set; }
+        public string RoleFigure { get; set; }
+        public string RoleQuotes { get; set; }
+        public string RoleIntroduce { get; set; }
+        public bool HasRoleIntroduce { get { return !string.IsNullOrWhiteSpace(RoleIntroduce); } }
+        public string RoleInitQuality { get; set; }
+        public bool HasQualityImage
+        {
+            get
+            {
+                return !string.IsNullOrEmpty(RoleInitQuality) && (RoleInitQuality.StartsWith("http://") || RoleInitQuality.StartsWith("https://"));
+            }
+        }
+        public bool HasQualityText
+        {
+            get
+            {
+                return !string.IsNullOrEmpty(RoleInitQuality) && !HasQualityImage;
+            }
+        }
+        public string CampIcon { get; set; }
+
+        public List<WikiKeyValueItem> EnergyList { get; set; }
+        public bool HasEnergy { get { return EnergyList != null && EnergyList.Count > 0; } }
+
+        public List<WikiKeyValueItem> FeatureList { get; set; }
+        public bool HasFeatures { get { return FeatureList != null && FeatureList.Count > 0; } }
+
+        public string EffectDescription { get; set; }
+        public string EffectIcon { get; set; }
+        public bool HasEffect { get { return !string.IsNullOrEmpty(EffectDescription); } }
+
+        public List<WikiRoleStatItem> Stats { get; set; }
+        public bool HasStats { get { return Stats != null && Stats.Count > 0; } }
+
+        public List<WikiKeyValueItem> ProfileList { get; set; }
+        public bool HasProfiles { get { return ProfileList != null && ProfileList.Count > 0; } }
+
+        public List<WikiRoleGearItem> GearList { get; set; }
+        public bool HasGears { get { return GearList != null && GearList.Count > 0; } }
+
+        public WikiRoleCardInfo()
+        {
+            EnergyList = new List<WikiKeyValueItem>();
+            FeatureList = new List<WikiKeyValueItem>();
+            Stats = new List<WikiRoleStatItem>();
+            ProfileList = new List<WikiKeyValueItem>();
+            GearList = new List<WikiRoleGearItem>();
+        }
+    }
+
+    public class WikiSkillRowItem
+    {
+        public string Name { get; set; }
+        public string IconUrl { get; set; }
+        public string TypeTag { get; set; }
+        public string Description { get; set; }
+        public string ColorHex { get; set; }
+        public List<PostTextRun> Runs { get; set; }
+        public bool HasIcon { get { return !string.IsNullOrEmpty(IconUrl); } }
+        public bool HasTypeTag { get { return !string.IsNullOrEmpty(TypeTag); } }
+        public bool HasName { get { return !string.IsNullOrEmpty(Name); } }
+        public bool HasRuns { get { return Runs != null && Runs.Count > 0; } }
+
+        public WikiSkillRowItem()
+        {
+            Runs = new List<PostTextRun>();
+        }
+    }
+
+    public class WikiVoiceRowItem
+    {
+        public string Tag { get; set; }
+        public string Text { get; set; }
+        public List<PostTextRun> Runs { get; set; }
+        public bool HasRuns { get { return Runs != null && Runs.Count > 0; } }
+
+        public WikiVoiceRowItem()
+        {
+            Runs = new List<PostTextRun>();
+        }
+    }
+
+    public class WikiSectionItem : INotifyPropertyChanged
+    {
+        public string Title { get; set; }
+        public string Subtitle { get; set; }
+        public string Content { get; set; }
+        public string IconUrl { get; set; }
+        public string ImageUrl { get; set; }
+        public List<WikiSectionItem> Children { get; set; }
+        public List<PostTextRun> Runs { get; set; }
+
+        public bool HasChildren { get { return Children != null && Children.Count > 0; } }
+        public bool HasImage { get { return !string.IsNullOrEmpty(ImageUrl); } }
+        public bool HasIcon { get { return !string.IsNullOrEmpty(IconUrl); } }
+        public bool HasSubtitle { get { return !string.IsNullOrEmpty(Subtitle); } }
+        public bool HasContent { get { return !string.IsNullOrEmpty(Content); } }
+        public bool HasRuns { get { return Runs != null && Runs.Count > 0; } }
+
+        private bool _isExpanded;
+        public bool IsExpanded
+        {
+            get { return _isExpanded; }
+            set
+            {
+                if (_isExpanded != value)
+                {
+                    _isExpanded = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged("ExpandGlyph");
+                    OnPropertyChanged("ContentVisibility");
+                }
+            }
+        }
+
+        public string ExpandGlyph
+        {
+            get { return _isExpanded ? "" : ""; }
+        }
+
+        public Visibility ContentVisibility
+        {
+            get { return _isExpanded ? Visibility.Visible : Visibility.Collapsed; }
+        }
+
+        public WikiSectionItem()
+        {
+            Children = new List<WikiSectionItem>();
+            Runs = new List<PostTextRun>();
+            _isExpanded = false;
+        }
+
+        public event PropertyChangedEventHandler PropertyChanged;
+        protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
+        {
+            if (PropertyChanged != null) PropertyChanged(this, new PropertyChangedEventArgs(propertyName));
+        }
+    }
+
+    public class WikiRotationStep
+    {
+        public int StepIndex { get; set; }
+        public string StepText { get; set; }
+        public string ActionType { get; set; }
+        public bool IsKeyAction { get; set; }
+    }
+
+    public class WikiRotationLine
+    {
+        public string Title { get; set; }
+        public string RawText { get; set; }
+        public List<WikiRotationStep> Steps { get; set; }
+        public List<PostTextRun> Runs { get; set; }
+        public bool HasSteps { get { return Steps != null && Steps.Count > 0; } }
+        public bool HasRuns { get { return Runs != null && Runs.Count > 0; } }
+
+        public WikiRotationLine()
+        {
+            Steps = new List<WikiRotationStep>();
+            Runs = new List<PostTextRun>();
+        }
+    }
+
+    public class WikiEquipRecommendItem
+    {
+        public string Name { get; set; }
+        public string Count { get; set; }
+        public string IconUrl { get; set; }
+        public string Category { get; set; }
+        public string Note { get; set; }
+        public string SubInfo { get; set; }
+        public string EntryId { get; set; }
+        public List<PostTextRun> Runs { get; set; }
+        public bool HasIcon { get { return !string.IsNullOrEmpty(IconUrl); } }
+        public bool HasLink { get { return !string.IsNullOrEmpty(EntryId) && EntryId != "0"; } }
+        public bool HasRuns { get { return Runs != null && Runs.Count > 0; } }
+        public bool HasNote { get { return !string.IsNullOrEmpty(Note); } }
+        public bool HasSubInfo { get { return !string.IsNullOrEmpty(SubInfo); } }
+
+        public WikiEquipRecommendItem()
+        {
+            Runs = new List<PostTextRun>();
+        }
+    }
+
+    public class WikiEquipRecommendGroup
+    {
+        public string Title { get; set; }
+        public List<WikiEquipRecommendItem> Items { get; set; }
+        public string Tip { get; set; }
+        public List<PostTextRun> TipRuns { get; set; }
+        public bool HasTipRuns { get { return TipRuns != null && TipRuns.Count > 0; } }
+
+        public WikiEquipRecommendGroup()
+        {
+            Items = new List<WikiEquipRecommendItem>();
+            TipRuns = new List<PostTextRun>();
+        }
+    }
+
+    public class WikiTabItem : INotifyPropertyChanged
+    {
+        public string Title { get; set; }
+        public string RawContent { get; set; }
+        public string CleanText { get; set; }
+        public string BigImageUrl { get; set; }
+        public List<string> ImageList { get; set; }
+        public ObservableCollection<WikiSectionItem> Sections { get; set; }
+        public List<WikiSkillRowItem> SkillRows { get; set; }
+        public List<WikiVoiceRowItem> VoiceRows { get; set; }
+        public List<WikiEquipRecommendGroup> EquipGroups { get; set; }
+        public List<WikiRotationLine> RotationLines { get; set; }
+        public List<PostTextRun> Runs { get; set; }
+        public string LinkUrl { get; set; }
+        public string LinkEntryId { get; set; }
+        public string LinkTitle { get; set; }
+
+        public bool HasLink { get { return !string.IsNullOrEmpty(LinkUrl) || (!string.IsNullOrEmpty(LinkEntryId) && LinkEntryId != "0"); } }
+        public bool HasBigImage { get { return !string.IsNullOrEmpty(BigImageUrl); } }
+        public bool HasSections { get { return Sections != null && Sections.Count > 0; } }
+        public bool HasSkillRows { get { return SkillRows != null && SkillRows.Count > 0; } }
+        public bool HasVoiceRows { get { return VoiceRows != null && VoiceRows.Count > 0; } }
+        public bool HasEquipGroups { get { return EquipGroups != null && EquipGroups.Count > 0; } }
+        public bool HasRotationLines { get { return RotationLines != null && RotationLines.Count > 0; } }
+        public bool HasRuns { get { return Runs != null && Runs.Count > 0; } }
+        public bool HasImages { get { return ImageList != null && ImageList.Count > 0 && !HasBigImage && !HasSections && !HasSkillRows && !HasVoiceRows && !HasEquipGroups && !HasRotationLines; } }
+        public bool HasCleanText { get { return !string.IsNullOrEmpty(CleanText) && !HasSections && !HasSkillRows && !HasVoiceRows && !HasEquipGroups && !HasRotationLines; } }
+
+        private bool _isSelected;
+        public bool IsSelected
+        {
+            get { return _isSelected; }
+            set
+            {
+                if (_isSelected != value)
+                {
+                    _isSelected = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public WikiTabItem()
+        {
+            ImageList = new List<string>();
+            Sections = new ObservableCollection<WikiSectionItem>();
+            SkillRows = new List<WikiSkillRowItem>();
+            VoiceRows = new List<WikiVoiceRowItem>();
+            EquipGroups = new List<WikiEquipRecommendGroup>();
+            RotationLines = new List<WikiRotationLine>();
+            Runs = new List<PostTextRun>();
+        }
+
+        public event PropertyChangedEventHandler PropertyChanged;
+        protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
+        {
+            if (PropertyChanged != null)
+                PropertyChanged(this, new PropertyChangedEventArgs(propertyName));
+        }
+    }
+
+    public class WikiStrategyItem
+    {
+        public string Title { get; set; }
+        public string BgUrl { get; set; }
+        public string EntryId { get; set; }
+        public int LinkType { get; set; }
+        public bool HasLink { get { return !string.IsNullOrEmpty(EntryId) && EntryId != "0"; } }
+    }
+
+    public class WikiAudioItem
+    {
+        public string Title { get; set; }
+        public string Script { get; set; }
+        public string PlayUrl { get; set; }
+        public long FileSize { get; set; }
+    }
+
+    public class WikiAudioTab
+    {
+        public string Title { get; set; }
+        public List<WikiAudioItem> Audios { get; set; }
+        public WikiAudioTab()
+        {
+            Audios = new List<WikiAudioItem>();
+        }
+    }
+
+    /// <summary>
+    /// 意识手册专用 - 单条属性（生命/攻击/会心/防御）
+    /// </summary>
+    public class ConsciousnessStatItem
+    {
+        public string Name { get; set; }
+        public string Value { get; set; }
+        public string IconUrl { get; set; }
+        public bool HasIcon { get { return !string.IsNullOrEmpty(IconUrl); } }
+    }
+
+    /// <summary>
+    /// 意识手册专用 - 套装技能效果（2件套 / 4件套）
+    /// </summary>
+    public class ConsciousnessSetEffect
+    {
+        public string Title { get; set; }
+        public string Body { get; set; }
+        public bool HasTitle { get { return !string.IsNullOrEmpty(Title); } }
+        public bool HasBody { get { return !string.IsNullOrEmpty(Body); } }
+    }
+
+    /// <summary>
+    /// 意识手册专用 - 突破素材中的单项材料
+    /// </summary>
+    public class ConsciousnessMaterialItem
+    {
+        public string Name { get; set; }
+        public string IconUrl { get; set; }
+        public string Count { get; set; }
+        public bool HasIcon { get { return !string.IsNullOrEmpty(IconUrl); } }
+        public bool HasCount { get { return !string.IsNullOrEmpty(Count); } }
+
+        public string CountDisplay
+        {
+            get { return string.IsNullOrEmpty(Count) ? "" : "×" + Count; }
+        }
+    }
+
+    /// <summary>
+    /// 意识手册专用 - 突破阶段（突破1 ~ 突破4）
+    /// </summary>
+    public class ConsciousnessBreakStage
+    {
+        public string Stage { get; set; }
+        public List<ConsciousnessMaterialItem> Materials { get; set; }
+        public bool HasMaterials { get { return Materials != null && Materials.Count > 0; } }
+
+        public ConsciousnessBreakStage()
+        {
+            Materials = new List<ConsciousnessMaterialItem>();
+        }
+    }
+
+    /// <summary>
+    /// 意识手册专用 - 意识故事
+    /// </summary>
+    public class ConsciousnessStory : INotifyPropertyChanged
+    {
+        public string Title { get; set; }
+        public string Body { get; set; }
+        public bool HasBody { get { return !string.IsNullOrWhiteSpace(Body); } }
+
+        private bool _isExpanded;
+        public bool IsExpanded
+        {
+            get { return _isExpanded; }
+            set
+            {
+                if (_isExpanded != value)
+                {
+                    _isExpanded = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged("ExpandGlyph");
+                    OnPropertyChanged("BodyVisibility");
+                }
+            }
+        }
+
+        public string ExpandGlyph
+        {
+            get { return _isExpanded ? "" : ""; }
+        }
+
+        public Visibility BodyVisibility
+        {
+            get { return _isExpanded ? Visibility.Visible : Visibility.Collapsed; }
+        }
+
+        public event PropertyChangedEventHandler PropertyChanged;
+        protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
+        {
+            if (PropertyChanged != null) PropertyChanged(this, new PropertyChangedEventArgs(propertyName));
+        }
+    }
+
+    /// <summary>
+    /// 意识手册专用 - 使用心得推荐卡片（缩略图 + 标题）
+    /// </summary>
+    public class ConsciousnessTipCard
+    {
+        public string Title { get; set; }
+        public string IconUrl { get; set; }
+        public bool HasTitle { get { return !string.IsNullOrEmpty(Title); } }
+        public bool HasIcon { get { return !string.IsNullOrEmpty(IconUrl); } }
+    }
+
+    /// <summary>
+    /// 意识手册专用 - 立绘页签（1/4号位 等）
+    /// </summary>
+    public class ConsciousnessIllustration
+    {
+        public string Title { get; set; }
+        public string TabIconUrl { get; set; }
+        public string ImageUrl { get; set; }
+        public string Painter { get; set; }
+        public bool HasImage { get { return !string.IsNullOrEmpty(ImageUrl); } }
+        public bool HasPainter { get { return !string.IsNullOrEmpty(Painter); } }
+
+        private bool _isSelected;
+        public bool IsSelected
+        {
+            get { return _isSelected; }
+            set
+            {
+                if (_isSelected != value)
+                {
+                    _isSelected = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public event PropertyChangedEventHandler PropertyChanged;
+        protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
+        {
+            if (PropertyChanged != null) PropertyChanged(this, new PropertyChangedEventArgs(propertyName));
+        }
+    }
+
+    /// <summary>
+    /// 意识手册专用 - 条目整体的结构化数据
+    /// </summary>
+    public class ConsciousnessInfo : INotifyPropertyChanged
+    {
+        // 基础资料
+        public string Rarity { get; set; }          // ★★★★★★
+        public int RarityStars { get; set; }        // 6
+        public string LevelCap { get; set; }        // 45
+        public string ApplicableTo { get; set; }    // 构造体
+        public string Traits { get; set; }          // 物理强化
+        public string Acquire { get; set; }         // 商店等渠道获取
+        public string CoverImageUrl { get; set; }
+
+        public bool HasCoverImage { get { return !string.IsNullOrEmpty(CoverImageUrl); } }
+        public bool HasRarity { get { return !string.IsNullOrEmpty(Rarity); } }
+        public bool HasLevelCap { get { return !string.IsNullOrEmpty(LevelCap); } }
+        public bool HasApplicableTo { get { return !string.IsNullOrEmpty(ApplicableTo); } }
+        public bool HasTraits { get { return !string.IsNullOrEmpty(Traits); } }
+        public bool HasAcquire { get { return !string.IsNullOrEmpty(Acquire); } }
+
+        // 属性（初始/最大）
+        public List<ConsciousnessStatItem> Stats { get; set; }
+        public bool HasStats { get { return Stats != null && Stats.Count > 0; } }
+        public List<ConsciousnessStatItem> PrimaryStats { get; set; }   // 1/2/3位
+        public List<ConsciousnessStatItem> SecondaryStats { get; set; } // 4/5/6位
+        public bool HasPrimaryStats { get { return PrimaryStats != null && PrimaryStats.Count > 0; } }
+        public bool HasSecondaryStats { get { return SecondaryStats != null && SecondaryStats.Count > 0; } }
+
+        // 套装技能效果
+        public List<ConsciousnessSetEffect> SetEffects { get; set; }
+        public bool HasSetEffects { get { return SetEffects != null && SetEffects.Count > 0; } }
+
+        // 突破素材
+        public List<ConsciousnessBreakStage> BreakStages { get; set; }
+        public bool HasBreakStages { get { return BreakStages != null && BreakStages.Count > 0; } }
+
+        // 意识故事
+        public List<ConsciousnessStory> Stories { get; set; }
+        public bool HasStories { get { return Stories != null && Stories.Count > 0; } }
+
+        // 意识使用心得
+        public List<ConsciousnessTipCard> Tips { get; set; }
+        public bool HasTips { get { return Tips != null && Tips.Count > 0; } }
+        public string TipsTitle { get; set; }
+
+        // 意识立绘
+        public List<ConsciousnessIllustration> Illustrations { get; set; }
+        public bool HasIllustrations { get { return Illustrations != null && Illustrations.Count > 0; } }
+
+        private ConsciousnessIllustration _selectedIllustration;
+        public ConsciousnessIllustration SelectedIllustration
+        {
+            get { return _selectedIllustration; }
+            set
+            {
+                if (_selectedIllustration != value)
+                {
+                    if (_selectedIllustration != null) _selectedIllustration.IsSelected = false;
+                    _selectedIllustration = value;
+                    if (_selectedIllustration != null) _selectedIllustration.IsSelected = true;
+                    OnPropertyChanged();
+                    OnPropertyChanged("ActiveIllustrationImage");
+                    OnPropertyChanged("HasActiveIllustrationImage");
+                    OnPropertyChanged("ActiveIllustrationPainter");
+                    OnPropertyChanged("HasActiveIllustrationPainter");
+                }
+            }
+        }
+
+        public string ActiveIllustrationImage
+        {
+            get { return _selectedIllustration != null ? _selectedIllustration.ImageUrl : ""; }
+        }
+
+        public bool HasActiveIllustrationImage
+        {
+            get { return !string.IsNullOrEmpty(ActiveIllustrationImage); }
+        }
+
+        public string ActiveIllustrationPainter
+        {
+            get { return _selectedIllustration != null ? _selectedIllustration.Painter : ""; }
+        }
+
+        public bool HasActiveIllustrationPainter
+        {
+            get { return !string.IsNullOrEmpty(ActiveIllustrationPainter); }
+        }
+
+        public ConsciousnessInfo()
+        {
+            Stats = new List<ConsciousnessStatItem>();
+            PrimaryStats = new List<ConsciousnessStatItem>();
+            SecondaryStats = new List<ConsciousnessStatItem>();
+            SetEffects = new List<ConsciousnessSetEffect>();
+            BreakStages = new List<ConsciousnessBreakStage>();
+            Stories = new List<ConsciousnessStory>();
+            Tips = new List<ConsciousnessTipCard>();
+            Illustrations = new List<ConsciousnessIllustration>();
+        }
+
+        public event PropertyChangedEventHandler PropertyChanged;
+        protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
+        {
+            if (PropertyChanged != null) PropertyChanged(this, new PropertyChangedEventArgs(propertyName));
+        }
+    }
+
+    public class WikiDetailComponent : INotifyPropertyChanged
+    {
+        public string Type { get; set; }
+        public string Title { get; set; }
+        public string Size { get; set; }
+        public string Content { get; set; }
+        public string CleanText { get; set; }
+        public string ImageUrl { get; set; }
+        public List<string> ImageList { get; set; }
+        public List<PostTextRun> Runs { get; set; }
+
+        private bool _isCollapsed;
+        public bool IsCollapsed
+        {
+            get { return _isCollapsed; }
+            set
+            {
+                if (_isCollapsed != value)
+                {
+                    _isCollapsed = value;
+                    OnPropertyChanged();
+                    OnPropertyChanged("IsExpanded");
+                    OnPropertyChanged("ExpandGlyph");
+                    OnPropertyChanged("BodyVisibility");
+                }
+            }
+        }
+
+        public bool IsExpanded
+        {
+            get { return !_isCollapsed; }
+        }
+
+        public string ExpandGlyph
+        {
+            get { return _isCollapsed ? "" : ""; }
+        }
+
+        public Visibility BodyVisibility
+        {
+            get { return _isCollapsed ? Visibility.Collapsed : Visibility.Visible; }
+        }
+
+        public bool CanCollapse
+        {
+            get { return !string.IsNullOrEmpty(Title) && (Title.Contains("展开") || Title.Contains("详情") || _isCollapsed); }
+        }
+
+        public WikiRoleCardInfo RoleInfo { get; set; }
+        public ObservableCollection<WikiTabItem> Tabs { get; set; }
+        public List<WikiStrategyItem> Strategies { get; set; }
+        public List<WikiAudioTab> AudioTabs { get; set; }
+
+        /// <summary>意识手册专用结构化数据（非空即代表渲染意识版式）</summary>
+        public ConsciousnessInfo Consciousness { get; set; }
+        public bool HasConsciousnessInfo { get { return Consciousness != null; } }
+
+        private WikiTabItem _selectedTab;
+        public WikiTabItem SelectedTab
+        {
+            get { return _selectedTab; }
+            set
+            {
+                if (_selectedTab != value)
+                {
+                    if (_selectedTab != null) _selectedTab.IsSelected = false;
+                    _selectedTab = value;
+                    if (_selectedTab != null) _selectedTab.IsSelected = true;
+                    OnPropertyChanged();
+                    OnPropertyChanged("ActiveTabCleanText");
+                    OnPropertyChanged("ActiveTabRuns");
+                    OnPropertyChanged("HasActiveTabRuns");
+                    OnPropertyChanged("ActiveTabImages");
+                    OnPropertyChanged("HasActiveTabImages");
+                    OnPropertyChanged("ActiveTabBigImage");
+                    OnPropertyChanged("HasActiveTabBigImage");
+                    OnPropertyChanged("ActiveTabSections");
+                    OnPropertyChanged("HasActiveTabSections");
+                    OnPropertyChanged("ActiveTabSkillRows");
+                    OnPropertyChanged("HasActiveTabSkillRows");
+                    OnPropertyChanged("ActiveTabVoiceRows");
+                    OnPropertyChanged("HasActiveTabVoiceRows");
+                    OnPropertyChanged("ActiveTabEquipGroups");
+                    OnPropertyChanged("HasActiveTabEquipGroups");
+                    OnPropertyChanged("ActiveTabRotationLines");
+                    OnPropertyChanged("HasActiveTabRotationLines");
+                    OnPropertyChanged("HasActiveTabSimpleText");
+                    OnPropertyChanged("ActiveTabLinkUrl");
+                    OnPropertyChanged("ActiveTabLinkEntryId");
+                    OnPropertyChanged("ActiveTabLinkTitle");
+                    OnPropertyChanged("HasActiveTabLink");
+                }
+            }
+        }
+
+        public bool HasActiveTabLink
+        {
+            get { return _selectedTab != null && _selectedTab.HasLink; }
+        }
+
+        public string ActiveTabLinkTitle
+        {
+            get { return _selectedTab != null ? _selectedTab.LinkTitle : ""; }
+        }
+
+        public string ActiveTabLinkEntryId
+        {
+            get { return _selectedTab != null ? _selectedTab.LinkEntryId : ""; }
+        }
+
+        public string ActiveTabLinkUrl
+        {
+            get { return _selectedTab != null ? _selectedTab.LinkUrl : ""; }
+        }
+
+        public string ActiveTabCleanText
+        {
+            get { return _selectedTab != null ? _selectedTab.CleanText : CleanText; }
+        }
+
+        public List<PostTextRun> ActiveTabRuns
+        {
+            get { return _selectedTab != null ? _selectedTab.Runs : Runs; }
+        }
+
+        public bool HasActiveTabRuns
+        {
+            get { return ActiveTabRuns != null && ActiveTabRuns.Count > 0; }
+        }
+
+        public string ActiveTabBigImage
+        {
+            get { return _selectedTab != null ? _selectedTab.BigImageUrl : ""; }
+        }
+
+        public bool HasActiveTabBigImage
+        {
+            get { return !string.IsNullOrEmpty(ActiveTabBigImage); }
+        }
+
+        public ObservableCollection<WikiSectionItem> ActiveTabSections
+        {
+            get { return _selectedTab != null ? _selectedTab.Sections : null; }
+        }
+
+        public bool HasActiveTabSections
+        {
+            get { return ActiveTabSections != null && ActiveTabSections.Count > 0; }
+        }
+
+        public List<WikiSkillRowItem> ActiveTabSkillRows
+        {
+            get { return _selectedTab != null ? _selectedTab.SkillRows : null; }
+        }
+
+        public bool HasActiveTabSkillRows
+        {
+            get { return ActiveTabSkillRows != null && ActiveTabSkillRows.Count > 0; }
+        }
+
+        public List<WikiVoiceRowItem> ActiveTabVoiceRows
+        {
+            get { return _selectedTab != null ? _selectedTab.VoiceRows : null; }
+        }
+
+        public bool HasActiveTabVoiceRows
+        {
+            get { return ActiveTabVoiceRows != null && ActiveTabVoiceRows.Count > 0; }
+        }
+
+        public List<WikiEquipRecommendGroup> ActiveTabEquipGroups
+        {
+            get { return _selectedTab != null ? _selectedTab.EquipGroups : null; }
+        }
+
+        public bool HasActiveTabEquipGroups
+        {
+            get { return ActiveTabEquipGroups != null && ActiveTabEquipGroups.Count > 0; }
+        }
+
+        public List<WikiRotationLine> ActiveTabRotationLines
+        {
+            get { return _selectedTab != null ? _selectedTab.RotationLines : null; }
+        }
+
+        public bool HasActiveTabRotationLines
+        {
+            get { return ActiveTabRotationLines != null && ActiveTabRotationLines.Count > 0; }
+        }
+
+        public bool HasActiveTabSimpleText
+        {
+            get
+            {
+                if (HasActiveTabSections || HasActiveTabSkillRows || HasActiveTabVoiceRows || HasActiveTabEquipGroups || HasActiveTabRotationLines || HasActiveTabLink)
+                {
+                    return false;
+                }
+                return _selectedTab != null ? _selectedTab.HasCleanText : HasCleanText;
+            }
+        }
+
+        public List<string> ActiveTabImages
+        {
+            get { return _selectedTab != null ? _selectedTab.ImageList : ImageList; }
+        }
+
+        public bool HasActiveTabImages
+        {
+            get { return _selectedTab != null ? _selectedTab.HasImages : HasImages; }
+        }
+
+        public bool IsSpecializedComponent
+        {
+            get { return HasRoleInfo || HasTabs || HasStrategies || HasAudios || HasConsciousnessInfo; }
+        }
+
+        public bool HasRoleInfo { get { return RoleInfo != null; } }
+        public bool HasTabs { get { return Tabs != null && Tabs.Count > 0; } }
+        public bool HasStrategies { get { return Strategies != null && Strategies.Count > 0; } }
+        public bool HasAudios { get { return AudioTabs != null && AudioTabs.Count > 0; } }
+        public bool HasImages { get { return !IsSpecializedComponent && ImageList != null && ImageList.Count > 0; } }
+        public bool HasSingleImage { get { return !IsSpecializedComponent && !string.IsNullOrEmpty(ImageUrl); } }
+        public bool HasCleanText { get { return !IsSpecializedComponent && !string.IsNullOrEmpty(CleanText); } }
+        public bool HasRuns { get { return !IsSpecializedComponent && Runs != null && Runs.Count > 0; } }
+
+        public WikiDetailComponent()
+        {
+            ImageList = new List<string>();
+            Tabs = new ObservableCollection<WikiTabItem>();
+            Strategies = new List<WikiStrategyItem>();
+            AudioTabs = new List<WikiAudioTab>();
+            Runs = new List<PostTextRun>();
+        }
+
+        public event PropertyChangedEventHandler PropertyChanged;
+        protected void OnPropertyChanged([CallerMemberName] string propertyName = null)
+        {
+            if (PropertyChanged != null)
+                PropertyChanged(this, new PropertyChangedEventArgs(propertyName));
+        }
+    }
+
+    public class WikiDetailModule
+    {
+        public string Title { get; set; }
+        public List<WikiDetailComponent> Components { get; set; }
+
+        public WikiDetailModule()
+        {
+            Components = new List<WikiDetailComponent>();
+        }
+    }
+
+    public class WikiEntryDetail
+    {
+        public string Id { get; set; }
+        public string Name { get; set; }
+        public string OrgFullName { get; set; }
+        public string Title { get; set; }
+        public string LastUpdateTime { get; set; }
+        public string LastEditUserName { get; set; }
+        public int BrowseCount { get; set; }
+        public string CoverImageUrl { get; set; }
+        public List<WikiDetailModule> Modules { get; set; }
+        public List<WikiContributorItem> Contributors { get; set; }
+
+        public WikiEntryDetail()
+        {
+            Modules = new List<WikiDetailModule>();
+            Contributors = new List<WikiContributorItem>();
+        }
+    }
+
+    public class WikiHomepageData
+    {
+        public int WikiType { get; set; }
+        public string GameName { get; set; }
+        public List<WikiBannerItem> Banners { get; set; }
+        public List<WikiAnnouncementItem> Announcements { get; set; }
+        public List<WikiShortcutItem> Shortcuts { get; set; }
+        public List<WikiShortcutItem> MainModules { get; set; }
+        public List<WikiShortcutItem> SideModules { get; set; }
+        public List<WikiContributorItem> Contributors { get; set; }
+
+        public WikiHomepageData()
+        {
+            Banners = new List<WikiBannerItem>();
+            Announcements = new List<WikiAnnouncementItem>();
+            Shortcuts = new List<WikiShortcutItem>();
+            MainModules = new List<WikiShortcutItem>();
+            SideModules = new List<WikiShortcutItem>();
+            Contributors = new List<WikiContributorItem>();
+        }
+    }
+
+    #endregion
 }

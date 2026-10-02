@@ -47,7 +47,7 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <Border Width="56" Height="56" Background="#203B50" CornerRadius="28" BorderBrush="#208DD1" BorderThickness="2">
+                            <Border Width="56" Height="56" Background="#203B50" BorderBrush="#208DD1" BorderThickness="2">
                                 <Image Source="{Binding Account.HeadIconUrl, Converter={StaticResource ImageCacheConverter}}" Stretch="UniformToFill" />
                             </Border>
                             <StackPanel Grid.Column="1" Margin="12,0,8,0" VerticalAlignment="Center">

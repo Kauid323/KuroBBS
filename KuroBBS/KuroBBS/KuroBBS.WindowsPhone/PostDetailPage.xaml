@@ -216,7 +216,28 @@
                             <TextBlock Text="{Binding Post.Title}" FontSize="18" FontWeight="Bold" Foreground="White" Margin="0,0,0,12" TextWrapping="Wrap" />
 
                             <!-- Dynamic Structured Content Blocks (Paragraphs, Inline Emojis, In-place Images) -->
-                            <StackPanel x:Name="DynamicPostContentContainer" Margin="0,0,0,14" />
+                            <StackPanel x:Name="DynamicPostContentContainer" Margin="0,0,0,8" />
+
+                            <!-- Topic Tags (Auto-sized, bottom of post content, small pills) -->
+                            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Visibility="{Binding Post.HasTopics, Converter={StaticResource BoolToVis}}" Margin="0,4,0,12">
+                                <ItemsControl ItemsSource="{Binding Post.Topics}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <StackPanel Orientation="Horizontal" />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Background="#16222E" BorderBrush="#243B4E" BorderThickness="1" Padding="8,3" Margin="0,0,6,0" Tapped="OnTopicTagTapped" Tag="{Binding}">
+                                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <TextBlock Text="#" FontSize="11" FontWeight="Bold" Foreground="{StaticResource MetroAccentBrush}" Margin="0,0,2,0" />
+                                                    <TextBlock Text="{Binding TopicName}" FontSize="11" Foreground="#D8E8F5" VerticalAlignment="Center" />
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
 
                             <!-- Post Footer (IP 属地) -->
                             <Border Margin="0,12,0,24" Padding="0,10,0,0" BorderBrush="#222228" BorderThickness="0,1,0,0">

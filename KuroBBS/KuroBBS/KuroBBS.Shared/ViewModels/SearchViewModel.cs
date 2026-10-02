@@ -252,7 +252,7 @@ namespace KuroBBS.ViewModels
             try
             {
                 var configTask = KuroForumService.Instance.GetSearchConfigAsync(GameId);
-                var topicTask = KuroForumService.Instance.GetTopicHotListAsync(GameId, 1, 20);
+                var topicTask = KuroForumService.Instance.GetTopicHotListAsync(GameId, type: 4, pageIndex: 1, pageSize: 20);
 
                 await Task.WhenAll(configTask, topicTask);
 

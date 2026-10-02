@@ -39,8 +39,13 @@
     <Compile Include="$(MSBuildThisFileDirectory)Services\KuroVideoService.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Services\KuroHlsEngine.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)Services\HaruRoleService.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)Services\KuroWikiService.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ViewModels\ViewModelBase.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ViewModels\MainViewModel.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ViewModels\GameWikiViewModel.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ViewModels\WikiCatalogueTreeViewModel.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ViewModels\WikiItemListViewModel.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)ViewModels\WikiEntryDetailViewModel.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ViewModels\CreatePostViewModel.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ViewModels\PostDetailViewModel.cs" />
     <Compile Include="$(MSBuildThisFileDirectory)ViewModels\UserProfileViewModel.cs" />

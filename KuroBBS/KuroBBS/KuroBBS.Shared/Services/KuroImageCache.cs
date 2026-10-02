@@ -33,6 +33,8 @@ namespace KuroBBS.Services
         }
 
         private readonly Dictionary<string, BitmapImage> _memoryCache;
+        private readonly LinkedList<string> _lruKeys;
+        private const int MaxMemoryCacheItems = 45;
         private readonly HashSet<string> _diskFileCache;
         private readonly HashSet<string> _inFlightUrls;
         private readonly object _lock = new object();
@@ -45,6 +47,7 @@ namespace KuroBBS.Services
         public KuroImageCache()
         {
             _memoryCache = new Dictionary<string, BitmapImage>();
+            _lruKeys = new LinkedList<string>();
             _diskFileCache = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             _inFlightUrls = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -89,7 +92,7 @@ namespace KuroBBS.Services
             return _initTcs.Task;
         }
 
-        public BitmapImage GetImageSource(string url, int decodeWidth = 720, int decodeHeight = 0)
+        public BitmapImage GetImageSource(string url, int decodeWidth = 360, int decodeHeight = 0)
         {
             if (string.IsNullOrWhiteSpace(url)) return null;
 
@@ -98,6 +101,9 @@ namespace KuroBBS.Services
             {
                 if (_memoryCache.ContainsKey(cacheKey))
                 {
+                    // Move to front of LRU
+                    _lruKeys.Remove(cacheKey);
+                    _lruKeys.AddFirst(cacheKey);
                     return _memoryCache[cacheKey];
                 }
             }
@@ -114,12 +120,12 @@ namespace KuroBBS.Services
             if (decodeHeight > 0)
             {
                 bitmap.DecodePixelType = DecodePixelType.Physical;
-                bitmap.DecodePixelHeight = Math.Min(2048, decodeHeight);
+                bitmap.DecodePixelHeight = Math.Min(1080, decodeHeight);
             }
             else if (decodeWidth > 0)
             {
                 bitmap.DecodePixelType = DecodePixelType.Physical;
-                bitmap.DecodePixelWidth = Math.Min(2048, decodeWidth);
+                bitmap.DecodePixelWidth = Math.Min(1080, decodeWidth);
             }
 
             if (isCachedOnDisk)
@@ -133,10 +139,7 @@ namespace KuroBBS.Services
                     try { bitmap.UriSource = new Uri(url); } catch { }
                 }
 
-                lock (_lock)
-                {
-                    _memoryCache[cacheKey] = bitmap;
-                }
+                PutInMemoryCache(cacheKey, bitmap);
                 return bitmap;
             }
 
@@ -147,13 +150,32 @@ namespace KuroBBS.Services
             }
             catch { }
 
-            lock (_lock)
-            {
-                _memoryCache[cacheKey] = bitmap;
-            }
+            PutInMemoryCache(cacheKey, bitmap);
 
             QueueBackgroundDownload(url, fileName);
             return bitmap;
+        }
+
+        private void PutInMemoryCache(string key, BitmapImage bitmap)
+        {
+            lock (_lock)
+            {
+                if (_memoryCache.ContainsKey(key))
+                {
+                    _lruKeys.Remove(key);
+                }
+                else
+                {
+                    while (_memoryCache.Count >= MaxMemoryCacheItems && _lruKeys.Count > 0)
+                    {
+                        string oldestKey = _lruKeys.Last.Value;
+                        _lruKeys.RemoveLast();
+                        _memoryCache.Remove(oldestKey);
+                    }
+                }
+                _lruKeys.AddFirst(key);
+                _memoryCache[key] = bitmap;
+            }
         }
 
         public async Task<byte[]> GetImageBytesAsync(string url)

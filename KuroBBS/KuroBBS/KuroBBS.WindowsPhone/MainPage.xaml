@@ -14,27 +14,23 @@
         <CommandBar x:Name="MainCommandBar" Background="#121216" ClosedDisplayMode="Compact" IsOpen="False">
             <AppBarButton Icon="Edit" Label="发帖" Click="OnCreatePostClick" />
             <AppBarButton Icon="Find" Label="搜索" Click="OnSearchClick" />
-            <AppBarButton Icon="Filter" Label="分区切换">
+            <AppBarButton x:Name="GameFilterAppBarButton" Icon="Filter" Label="分区切换">
                 <AppBarButton.Flyout>
                     <MenuFlyout>
-                        <MenuFlyoutItem Text="鸣潮" Command="{Binding SelectGameCommand}" CommandParameter="3" />
-                        <MenuFlyoutItem Text="战双帕弥什" Command="{Binding SelectGameCommand}" CommandParameter="2" />
-                    </MenuFlyout>
-                </AppBarButton.Flyout>
-            </AppBarButton>
-            <AppBarButton Icon="Sort" Label="排序">
-                <AppBarButton.Flyout>
-                    <MenuFlyout>
-                        <MenuFlyoutItem Text="默认推荐" Command="{Binding SelectSortCommand}" CommandParameter="3" />
-                        <MenuFlyoutItem Text="最新回复" Command="{Binding SelectSortCommand}" CommandParameter="2" />
-                        <MenuFlyoutItem Text="最新发布" Command="{Binding SelectSortCommand}" CommandParameter="1" />
+                        <MenuFlyoutItem Text="鸣潮 (Wuthering Waves)" Click="OnSelectMingChaoClick" />
+                        <MenuFlyoutItem Text="战双帕弥什 (Punishing Gray Raven)" Click="OnSelectZhanShuangClick" />
                     </MenuFlyout>
                 </AppBarButton.Flyout>
             </AppBarButton>
             <AppBarButton Icon="Refresh" Label="刷新" Command="{Binding RefreshCommand}" />
             
             <CommandBar.SecondaryCommands>
-                <AppBarButton Label="每日签到" Command="{Binding ExecuteSignInCommand}" />
+                <AppBarButton Label="鸣潮 (Wuthering Waves)" Click="OnSelectMingChaoClick" />
+                <AppBarButton Label="战双帕弥什 (Punishing Gray Raven)" Click="OnSelectZhanShuangClick" />
+                <AppBarButton Label="默认推荐" Command="{Binding SelectSortCommand}" CommandParameter="3" />
+                <AppBarButton Label="最新回复" Command="{Binding SelectSortCommand}" CommandParameter="2" />
+                <AppBarButton Label="最新发布" Command="{Binding SelectSortCommand}" CommandParameter="1" />
+                <AppBarButton Label="每日签到" Click="OnGoToSignInClick" />
                 <AppBarButton Label="系统设置" Click="OnSettingsClick" />
             </CommandBar.SecondaryCommands>
         </CommandBar>
@@ -336,7 +332,60 @@
                 </Grid>
             </PivotItem>
 
-            <!-- Tab 3: 每日签到 -->
+            <!-- Tab 3: 游戏工具与WIKI导航 (Game Wiki & Tools) -->
+            <PivotItem Header="游戏" Margin="0">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="12,6,12,24">
+                        <!-- Section Header -->
+                        <Border Background="{StaticResource MetroCardBackgroundBrush}" Padding="14" BorderBrush="#2C2C34" BorderThickness="1" Margin="0,0,0,12">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="游戏工具与WIKI" FontSize="16" FontWeight="Bold" Foreground="White" />
+                                    <TextBlock Text="{Binding SelectedGameName, Converter={StaticResource StringFormatConverter}, ConverterParameter='当前分区: {0} 官方实用工具库'}" FontSize="11" Foreground="{StaticResource MetroSubTextBrush}" Margin="0,2,0,0" />
+                                </StackPanel>
+                                <TextBlock Grid.Column="1" Text="🎮" FontSize="26" VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
+
+                        <!-- Game Wiki / Tools GridView (flat Metro square tiles) -->
+                        <GridView ItemsSource="{Binding GameWikiList}"
+                                  SelectionMode="None"
+                                  IsItemClickEnabled="True"
+                                  ItemClick="OnGameWikiItemClick">
+                            <GridView.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="{StaticResource MetroCardBackgroundBrush}" BorderBrush="#2C2C34" BorderThickness="1"
+                                            Width="96" Height="100" Margin="0,0,8,8" Padding="6">
+                                        <Grid>
+                                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                <!-- Icon -->
+                                                <Border Width="44" Height="44" Background="#141418" BorderBrush="#333340" BorderThickness="1" HorizontalAlignment="Center" Margin="0,0,0,6">
+                                                    <Image Source="{Binding DisplayIcon, Converter={StaticResource ImageCacheConverter}}" Stretch="UniformToFill" />
+                                                </Border>
+
+                                                <!-- Wiki / Tool Name -->
+                                                <TextBlock Text="{Binding WikiName}" FontSize="12" FontWeight="SemiBold" Foreground="White"
+                                                           HorizontalAlignment="Center" TextAlignment="Center" TextTrimming="CharacterEllipsis" MaxLines="1" />
+                                            </StackPanel>
+
+                                            <!-- Red Point Indicator (if showRedPoint) -->
+                                            <Border Visibility="{Binding ShowRedPoint, Converter={StaticResource BoolToVis}}"
+                                                    Width="8" Height="8" Background="#FF3B30"
+                                                    HorizontalAlignment="Right" VerticalAlignment="Top" Margin="2" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </GridView.ItemTemplate>
+                        </GridView>
+                    </StackPanel>
+                </ScrollViewer>
+            </PivotItem>
+
+            <!-- Tab 4: 每日签到 -->
             <PivotItem Header="签到" Margin="0">
                 <ScrollViewer>
                     <StackPanel Margin="0,0,0,20">
@@ -429,27 +478,107 @@
                             </Grid>
                         </Border>
 
-                        <!-- Month Records -->
-                        <TextBlock Text="本月签到奖励记录" FontSize="14" FontWeight="Bold" Foreground="White" Margin="0,8,0,8" />
+                        <!-- Month Reward Supply Calendar -->
+                        <TextBlock Text="本月物资奖励日历" FontSize="14" FontWeight="Bold" Foreground="White" Margin="0,4,0,8" />
                         <ItemsControl ItemsSource="{Binding SignInInfo.MonthRecords}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapGrid Orientation="Horizontal" MaximumRowsOrColumns="4" ItemWidth="80" ItemHeight="96" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Border Background="#1A1A20" Padding="10" Margin="0,0,0,6">
+                                    <Border Background="#16161E" BorderBrush="#262632" BorderThickness="1" Margin="2" Padding="4">
+                                        <Grid>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="*" />
+                                                <RowDefinition Height="Auto" />
+                                            </Grid.RowDefinitions>
+
+                                            <Grid Grid.Row="0">
+                                                <TextBlock Text="{Binding Date}" FontSize="10" Foreground="{StaticResource MetroSubTextBrush}" />
+                                                <TextBlock Text="{Binding RewardCountDisplay}" FontSize="10" FontWeight="Bold" Foreground="{StaticResource MetroGoldBrush}" HorizontalAlignment="Right" />
+                                            </Grid>
+
+                                            <Grid Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,2">
+                                                <Image Source="{Binding RewardIcon, Converter={StaticResource ImageCacheConverter}, ConverterParameter=96}" Width="38" Height="38" Stretch="Uniform" />
+                                            </Grid>
+
+                                            <TextBlock Grid.Row="2" Text="{Binding RewardName}" FontSize="9" Foreground="White" TextTrimming="CharacterEllipsis" TextAlignment="Center" />
+
+                                            <Border Visibility="{Binding IsSignedIn, Converter={StaticResource BoolToVis}}" Background="#B0000000" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Grid.RowSpan="3" Margin="-4">
+                                                <Border Background="{StaticResource MetroAccentBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" Padding="6,2">
+                                                    <TextBlock Text="已获取" FontSize="10" FontWeight="Bold" Foreground="White" />
+                                                </Border>
+                                            </Border>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <!-- Sign-in Claim History Records -->
+                        <Border Visibility="{Binding HasSignInClaimRecords, Converter={StaticResource BoolToVis}}" Margin="0,16,0,8">
+                            <TextBlock Text="近期签到发放记录" FontSize="14" FontWeight="Bold" Foreground="White" />
+                        </Border>
+                        <ItemsControl ItemsSource="{Binding SignInClaimRecords}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="{StaticResource MetroCardBackgroundBrush}" BorderBrush="#262630" BorderThickness="1" Padding="10" Margin="0,0,0,6">
                                         <Grid>
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="Auto" />
                                                 <ColumnDefinition Width="*" />
                                                 <ColumnDefinition Width="Auto" />
                                             </Grid.ColumnDefinitions>
-
-                                            <TextBlock Grid.Column="0" Text="{Binding Date}" FontSize="12" Foreground="{StaticResource MetroSubTextBrush}" VerticalAlignment="Center" Margin="0,0,12,0" />
-                                            <TextBlock Grid.Column="1" Text="{Binding RewardName}" FontSize="13" Foreground="White" VerticalAlignment="Center" />
-                                            <TextBlock Grid.Column="2" Text="{Binding IsSignedIn}" FontSize="12" Foreground="{StaticResource MetroAccentBrush}" VerticalAlignment="Center" />
+                                            <Border Grid.Column="0" Width="36" Height="36" Background="#1E1E28" Margin="0,0,10,0">
+                                                <Image Source="{Binding GoodsUrl, Converter={StaticResource ImageCacheConverter}, ConverterParameter=96}" Stretch="Uniform" />
+                                            </Border>
+                                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock Text="{Binding GoodsName}" FontSize="13" FontWeight="Bold" Foreground="White" Margin="0,0,6,0" />
+                                                    <TextBlock Text="{Binding GoodsNumText}" FontSize="12" FontWeight="Bold" Foreground="{StaticResource MetroGoldBrush}" />
+                                                </StackPanel>
+                                                <TextBlock Text="{Binding SignInDate}" FontSize="10" Foreground="{StaticResource MetroSubTextBrush}" Margin="0,2,0,0" />
+                                            </StackPanel>
+                                            <Border Grid.Column="2" Background="#203628" Padding="6,2" VerticalAlignment="Center">
+                                                <TextBlock Text="已发放" FontSize="10" Foreground="#34C759" />
+                                            </Border>
                                         </Grid>
                                     </Border>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
+
+                        <!-- Official Recommend Follows -->
+                        <Border Visibility="{Binding HasCommendFollows, Converter={StaticResource BoolToVis}}" Margin="0,16,0,8">
+                            <TextBlock Text="官方推荐关注" FontSize="14" FontWeight="Bold" Foreground="White" />
+                        </Border>
+                        <ItemsControl ItemsSource="{Binding CommendFollows}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="{StaticResource MetroCardBackgroundBrush}" BorderBrush="#262630" BorderThickness="1" Padding="10" Margin="0,0,0,6">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <Border Grid.Column="0" Width="40" Height="40" Background="#1E1E28" Margin="0,0,10,0">
+                                                <Image Source="{Binding UserHeadUrl, Converter={StaticResource ImageCacheConverter}, ConverterParameter=96}" Stretch="UniformToFill" />
+                                            </Border>
+                                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,8,0">
+                                                <TextBlock Text="{Binding UserName}" FontSize="13" FontWeight="Bold" Foreground="White" />
+                                                <TextBlock Text="{Binding UserSign}" FontSize="11" Foreground="{StaticResource MetroSubTextBrush}" Margin="0,2,0,0" MaxLines="1" TextTrimming="CharacterEllipsis" />
+                                            </StackPanel>
+                                            <Button Grid.Column="2" Content="{Binding FollowBtnText}" Tag="{Binding}" Click="OnFollowCommendClick" Background="#262634" Foreground="{StaticResource MetroAccentBrush}" FontSize="11" Padding="10,4" BorderThickness="0" VerticalAlignment="Center" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
                     </StackPanel>
                 </ScrollViewer>
             </PivotItem>
@@ -625,6 +754,7 @@
                 </ScrollViewer>
             </PivotItem>
         </Pivot>
+
 
         <!-- Geetest GT4 Risk Verification Modal Overlay -->
         <Grid Visibility="{Binding IsGeetestVisible, Converter={StaticResource BoolToVis}}" Background="#E8000000" Canvas.ZIndex="1000">

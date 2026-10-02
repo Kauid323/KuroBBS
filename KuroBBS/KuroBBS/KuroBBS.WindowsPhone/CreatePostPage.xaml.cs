@@ -186,6 +186,7 @@ namespace KuroBBS
         {
             ColorStripPanel.Visibility = (ColorStripPanel.Visibility == Visibility.Visible) ? Visibility.Collapsed : Visibility.Visible;
             EmojiPickerPanel.Visibility = Visibility.Collapsed;
+            TopicPickerPanel.Visibility = Visibility.Collapsed;
         }
 
         private void OnCloseColorPanelClick(object sender, RoutedEventArgs e)
@@ -208,6 +209,7 @@ namespace KuroBBS
         {
             EmojiPickerPanel.Visibility = (EmojiPickerPanel.Visibility == Visibility.Visible) ? Visibility.Collapsed : Visibility.Visible;
             ColorStripPanel.Visibility = Visibility.Collapsed;
+            TopicPickerPanel.Visibility = Visibility.Collapsed;
         }
 
         private void OnCloseEmojiPanelClick(object sender, RoutedEventArgs e)
@@ -233,6 +235,63 @@ namespace KuroBBS
             }
         }
 
+        private async void OnInsertTopicClick(object sender, RoutedEventArgs e)
+        {
+            ColorStripPanel.Visibility = Visibility.Collapsed;
+            EmojiPickerPanel.Visibility = Visibility.Collapsed;
+            if (TopicPickerPanel.Visibility == Visibility.Visible)
+            {
+                TopicPickerPanel.Visibility = Visibility.Collapsed;
+            }
+            else
+            {
+                TopicPickerPanel.Visibility = Visibility.Visible;
+                await _viewModel.LoadHotTopicsAsync(_viewModel.SelectedGameId);
+            }
+        }
+
+        private void OnCloseTopicPanelClick(object sender, RoutedEventArgs e)
+        {
+            TopicPickerPanel.Visibility = Visibility.Collapsed;
+        }
+
+        private async void OnSearchTopicClick(object sender, RoutedEventArgs e)
+        {
+            string keyword = TopicSearchTextBox != null ? TopicSearchTextBox.Text : "";
+            await _viewModel.SearchTopicsAsync(keyword);
+        }
+
+        private async void OnTopicSearchTextBoxKeyDown(object sender, KeyRoutedEventArgs e)
+        {
+            if (e.Key == Windows.System.VirtualKey.Enter)
+            {
+                e.Handled = true;
+                string keyword = TopicSearchTextBox != null ? TopicSearchTextBox.Text : "";
+                await _viewModel.SearchTopicsAsync(keyword);
+            }
+        }
+
+        private void OnTopicListItemTapped(object sender, TappedRoutedEventArgs e)
+        {
+            var element = sender as FrameworkElement;
+            if (element != null && element.Tag is TopicItem)
+            {
+                var topic = element.Tag as TopicItem;
+                _viewModel.AddSelectedTopic(topic);
+                TopicPickerPanel.Visibility = Visibility.Collapsed;
+                e.Handled = true;
+            }
+        }
+
+        private void OnDeleteSelectedTopicClick(object sender, RoutedEventArgs e)
+        {
+            var btn = sender as Button;
+            if (btn != null && btn.Tag is TopicItem)
+            {
+                _viewModel.RemoveSelectedTopic(btn.Tag as TopicItem);
+            }
+        }
+
         private void OnFormatBoldClick(object sender, RoutedEventArgs e)
         {
             WrapOrInsertText("<b>", "</b>", "粗体");
@@ -251,12 +310,6 @@ namespace KuroBBS
         private void OnFormatHeadingClick(object sender, RoutedEventArgs e)
         {
             _viewModel.InsertHeading("大标题");
-        }
-
-        private void OnInsertTopicClick(object sender, RoutedEventArgs e)
-        {
-            string topicName = _viewModel.SelectedGameId == 2 ? "战双帕弥什" : "鸣潮";
-            _viewModel.InsertTopicTag(topicName);
         }
 
         private void OnTogglePreviewClick(object sender, RoutedEventArgs e)
@@ -358,6 +411,7 @@ namespace KuroBBS
                     ContentTextBox.SelectionStart = ContentTextBox.Text.Length;
                 }
             }
+            ContentTextBox.Focus(FocusState.Programmatic);
         }
 
         private void InsertTextAtSelection(string toInsert)
@@ -374,6 +428,7 @@ namespace KuroBBS
                 ContentTextBox.Text = current + toInsert;
                 ContentTextBox.SelectionStart = ContentTextBox.Text.Length;
             }
+            ContentTextBox.Focus(FocusState.Programmatic);
         }
     }
 }

@@ -13,7 +13,32 @@ namespace KuroBBS.Helpers
         private static readonly Regex ImgAttrRegex = new Regex(@"(src|width|height)\s*=\s*[""']([^""']+)[""']", RegexOptions.IgnoreCase);
         private static readonly Regex InlineTagRegex = new Regex(@"<(/?[a-zA-Z0-9]+)([^>]*)>", RegexOptions.Singleline);
         private static readonly Regex StyleColorRegex = new Regex(@"color\s*:\s*([^;""']+)");
+        private static readonly Regex StyleFontSizeRegex = new Regex(@"font-size\s*:\s*([0-9\.]+)(px|pt|em|rem|%)?", RegexOptions.IgnoreCase);
+        private static readonly Regex StyleWeightRegex = new Regex(@"font-weight\s*:\s*([^;""']+)");
+        private static readonly Regex StyleItalicRegex = new Regex(@"font-style\s*:\s*([^;""']+)");
+        private static readonly Regex StyleDecorationRegex = new Regex(@"text-decoration\s*:\s*([^;""']+)");
         private static readonly Regex EmojiRegex = new Regex(@"_\[/([^\]]+)\]");
+
+        private static readonly Dictionary<string, Windows.UI.Color> NamedColors = new Dictionary<string, Windows.UI.Color>(StringComparer.OrdinalIgnoreCase)
+        {
+            { "red", Windows.UI.Color.FromArgb(255, 255, 69, 58) },
+            { "green", Windows.UI.Color.FromArgb(255, 52, 199, 89) },
+            { "blue", Windows.UI.Color.FromArgb(255, 10, 132, 255) },
+            { "yellow", Windows.UI.Color.FromArgb(255, 255, 214, 10) },
+            { "orange", Windows.UI.Color.FromArgb(255, 255, 159, 10) },
+            { "purple", Windows.UI.Color.FromArgb(255, 191, 90, 242) },
+            { "pink", Windows.UI.Color.FromArgb(255, 255, 55, 95) },
+            { "cyan", Windows.UI.Color.FromArgb(255, 100, 210, 255) },
+            { "teal", Windows.UI.Color.FromArgb(255, 100, 210, 255) },
+            { "gold", Windows.UI.Color.FromArgb(255, 255, 215, 0) },
+            { "white", Windows.UI.Color.FromArgb(255, 255, 255, 255) },
+            { "gray", Windows.UI.Color.FromArgb(255, 160, 160, 170) },
+            { "grey", Windows.UI.Color.FromArgb(255, 160, 160, 170) },
+            { "silver", Windows.UI.Color.FromArgb(255, 192, 192, 192) },
+            { "lime", Windows.UI.Color.FromArgb(255, 50, 205, 50) },
+            { "magenta", Windows.UI.Color.FromArgb(255, 255, 0, 255) },
+            { "violet", Windows.UI.Color.FromArgb(255, 238, 130, 238) }
+        };
 
         public static List<PostContentBlock> ParseHtml(string html)
         {
@@ -115,21 +140,27 @@ namespace KuroBBS.Helpers
 
             bool bold = isHeading;
             bool italic = false;
+            bool underline = false;
+            bool strikethrough = false;
             string currentColor = defaultColor;
+            double? currentFontSize = null;
 
             int lastIdx = 0;
             var tagMatches = InlineTagRegex.Matches(html);
 
             var colorStack = new Stack<string>();
+            var fontSizeStack = new Stack<double?>();
             var boldStack = new Stack<bool>();
             var italicStack = new Stack<bool>();
+            var underlineStack = new Stack<bool>();
+            var strikeStack = new Stack<bool>();
 
             foreach (Match tm in tagMatches)
             {
                 if (tm.Index > lastIdx)
                 {
                     string text = html.Substring(lastIdx, tm.Index - lastIdx);
-                    AddTextRuns(runs, text, bold, italic, currentColor);
+                    AddTextRuns(runs, text, bold, italic, underline, strikethrough, currentColor, currentFontSize);
                 }
 
                 string fullTagName = tm.Groups[1].Value.ToLower();
@@ -161,15 +192,43 @@ namespace KuroBBS.Helpers
                         italic = true;
                     }
                 }
+                else if (tag == "u" || tag == "ins")
+                {
+                    if (isClosing)
+                    {
+                        underline = underlineStack.Count > 0 ? underlineStack.Pop() : false;
+                    }
+                    else
+                    {
+                        underlineStack.Push(underline);
+                        underline = true;
+                    }
+                }
+                else if (tag == "s" || tag == "strike" || tag == "del")
+                {
+                    if (isClosing)
+                    {
+                        strikethrough = strikeStack.Count > 0 ? strikeStack.Pop() : false;
+                    }
+                    else
+                    {
+                        strikeStack.Push(strikethrough);
+                        strikethrough = true;
+                    }
+                }
                 else if (tag == "span" || tag == "font")
                 {
                     if (isClosing)
                     {
                         currentColor = colorStack.Count > 0 ? colorStack.Pop() : defaultColor;
+                        currentFontSize = fontSizeStack.Count > 0 ? fontSizeStack.Pop() : null;
                     }
                     else
                     {
                         colorStack.Push(currentColor);
+                        fontSizeStack.Push(currentFontSize);
+
+                        // Color
                         var sm = StyleColorRegex.Match(attrs);
                         if (sm.Success)
                         {
@@ -183,11 +242,67 @@ namespace KuroBBS.Helpers
                                 currentColor = fm.Groups[1].Value.Trim();
                             }
                         }
+
+                        // Font size
+                        var fsm = StyleFontSizeRegex.Match(attrs);
+                        if (fsm.Success)
+                        {
+                            double sizeVal;
+                            if (double.TryParse(fsm.Groups[1].Value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out sizeVal))
+                            {
+                                string unit = fsm.Groups[2].Value.ToLower();
+                                if (unit == "em" || unit == "rem") sizeVal = sizeVal * 14.5;
+                                else if (unit == "%") sizeVal = (sizeVal / 100.0) * 14.5;
+                                if (sizeVal >= 9 && sizeVal <= 36) currentFontSize = sizeVal;
+                            }
+                        }
+                        else if (tag == "font")
+                        {
+                            var fmSize = Regex.Match(attrs, @"size\s*=\s*[""']?([1-7])");
+                            if (fmSize.Success)
+                            {
+                                int sizeNum;
+                                if (int.TryParse(fmSize.Groups[1].Value, out sizeNum))
+                                {
+                                    // Map font size 1..7 to reasonable pt
+                                    double[] sizeMap = { 10.0, 11.5, 13.0, 14.5, 17.0, 20.0, 24.0 };
+                                    if (sizeNum >= 1 && sizeNum <= 7) currentFontSize = sizeMap[sizeNum - 1];
+                                }
+                            }
+                        }
+
+                        // Font weight / style / text-decoration in style attribute
+                        var wm = StyleWeightRegex.Match(attrs);
+                        if (wm.Success && (wm.Groups[1].Value.Contains("bold") || wm.Groups[1].Value.Contains("700") || wm.Groups[1].Value.Contains("800") || wm.Groups[1].Value.Contains("900")))
+                        {
+                            bold = true;
+                        }
+
+                        var im = StyleItalicRegex.Match(attrs);
+                        if (im.Success && im.Groups[1].Value.Contains("italic"))
+                        {
+                            italic = true;
+                        }
+
+                        var dm = StyleDecorationRegex.Match(attrs);
+                        if (dm.Success)
+                        {
+                            string decor = dm.Groups[1].Value;
+                            if (decor.Contains("underline")) underline = true;
+                            if (decor.Contains("line-through")) strikethrough = true;
+                        }
                     }
                 }
                 else if (tag == "br")
                 {
-                    AddTextRuns(runs, "\n", bold, italic, currentColor);
+                    AddTextRuns(runs, "\n", bold, italic, underline, strikethrough, currentColor, currentFontSize);
+                }
+                else if (tag == "p" || tag == "div" || tag == "tr" || tag == "li" || tag == "h1" || tag == "h2" || tag == "h3" || tag == "h4" || tag == "h5" || tag == "h6")
+                {
+                    if (isClosing)
+                    {
+                        AddTextRuns(runs, "\n", bold, italic, underline, strikethrough, currentColor, currentFontSize);
+                    }
                 }
 
                 lastIdx = tm.Index + tm.Length;
@@ -196,13 +311,13 @@ namespace KuroBBS.Helpers
             if (lastIdx < html.Length)
             {
                 string remaining = html.Substring(lastIdx);
-                AddTextRuns(runs, remaining, bold, italic, currentColor);
+                AddTextRuns(runs, remaining, bold, italic, underline, strikethrough, currentColor, currentFontSize);
             }
 
             return runs;
         }
 
-        private static void AddTextRuns(List<PostTextRun> runs, string rawText, bool bold, bool italic, string color)
+        private static void AddTextRuns(List<PostTextRun> runs, string rawText, bool bold, bool italic, bool underline, bool strikethrough, string color, double? fontSize)
         {
             if (string.IsNullOrEmpty(rawText)) return;
 
@@ -223,7 +338,10 @@ namespace KuroBBS.Helpers
                             Text = t,
                             IsBold = bold,
                             IsItalic = italic,
-                            ColorHex = color
+                            IsUnderline = underline,
+                            IsStrikethrough = strikethrough,
+                            ColorHex = color,
+                            FontSize = fontSize
                         });
                     }
                 }
@@ -251,7 +369,10 @@ namespace KuroBBS.Helpers
                         Text = rem,
                         IsBold = bold,
                         IsItalic = italic,
-                        ColorHex = color
+                        IsUnderline = underline,
+                        IsStrikethrough = strikethrough,
+                        ColorHex = color,
+                        FontSize = fontSize
                     });
                 }
             }
@@ -273,7 +394,13 @@ namespace KuroBBS.Helpers
         public static Windows.UI.Color? ParseColor(string colorStr)
         {
             if (string.IsNullOrWhiteSpace(colorStr)) return null;
-            string c = colorStr.Trim();
+            string c = colorStr.Trim(' ', ';', '"', '\'');
+
+            // Named colors
+            if (NamedColors.ContainsKey(c))
+            {
+                return NamedColors[c];
+            }
 
             // rgb(r, g, b) or rgba(r, g, b, a)
             if (c.StartsWith("rgb", StringComparison.OrdinalIgnoreCase))
@@ -302,9 +429,8 @@ namespace KuroBBS.Helpers
                                 }
                             }
 
-                            // Protect against very dark text on dark background
-                            int brightness = (int)(0.299 * r + 0.587 * g + 0.114 * b);
-                            if (brightness < 60) return null;
+                            // Protect against pure black on dark theme
+                            if (r < 30 && g < 30 && b < 30) return null;
 
                             return Windows.UI.Color.FromArgb(a, r, g, b);
                         }
@@ -329,8 +455,8 @@ namespace KuroBBS.Helpers
                         byte g = (byte)((val >> 8) & 0xFF);
                         byte b = (byte)(val & 0xFF);
 
-                        int brightness = (int)(0.299 * r + 0.587 * g + 0.114 * b);
-                        if (brightness < 60) return null;
+                        // Protect against pure black on dark theme
+                        if (r < 30 && g < 30 && b < 30) return null;
 
                         return Windows.UI.Color.FromArgb(255, r, g, b);
                     }

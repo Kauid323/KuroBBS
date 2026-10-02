@@ -524,6 +524,18 @@ namespace KuroBBS
             }
         }
 
+        private void OnTopicTagTapped(object sender, TappedRoutedEventArgs e)
+        {
+            var border = sender as FrameworkElement;
+            if (border == null) return;
+            var topic = border.Tag as TopicItem ?? border.DataContext as TopicItem;
+            if (topic != null)
+            {
+                this.Frame.Navigate(typeof(TopicDetailPage), topic);
+                e.Handled = true;
+            }
+        }
+
         private async void OnCommentLikeButtonClick(object sender, RoutedEventArgs e)
         {
             var btn = sender as FrameworkElement;
@@ -633,10 +645,10 @@ namespace KuroBBS
             bool isHeading = (block != null && block.IsHeading);
             int headingLevel = (block != null) ? block.HeadingLevel : 1;
 
-            double fontSize = isHeading ? (headingLevel == 1 ? 18.0 : headingLevel == 2 ? 16.5 : 15.5) : 14.5;
-            double lineHeight = isHeading ? 24.0 : 22.0;
-            var margin = isHeading ? new Thickness(0, 14, 0, 6) : new Thickness(0, 3, 0, 7);
-            var defaultColor = isHeading ? Windows.UI.Color.FromArgb(255, 248, 248, 252) : Windows.UI.Color.FromArgb(255, 224, 224, 230);
+            double fontSize = isHeading ? (headingLevel == 1 ? 20.0 : headingLevel == 2 ? 18.0 : headingLevel == 3 ? 16.5 : 15.5) : 14.5;
+            double lineHeight = isHeading ? (headingLevel == 1 ? 28.0 : headingLevel == 2 ? 25.0 : 23.0) : 22.0;
+            var margin = isHeading ? (headingLevel == 1 ? new Thickness(0, 16, 0, 8) : headingLevel == 2 ? new Thickness(0, 14, 0, 6) : new Thickness(0, 12, 0, 4)) : new Thickness(0, 3, 0, 7);
+            var defaultColor = isHeading ? Windows.UI.Color.FromArgb(255, 255, 255, 255) : Windows.UI.Color.FromArgb(255, 224, 224, 230);
 
             var rtb = new RichTextBlock
             {
@@ -650,7 +662,7 @@ namespace KuroBBS
 
             if (isHeading)
             {
-                rtb.FontWeight = Windows.UI.Text.FontWeights.SemiBold;
+                rtb.FontWeight = Windows.UI.Text.FontWeights.Bold;
             }
 
             var p = new Paragraph();
@@ -708,7 +720,17 @@ namespace KuroBBS
                             r.Foreground = new SolidColorBrush(c.Value);
                         }
                     }
-                    p.Inlines.Add(r);
+
+                    if (run.IsUnderline)
+                    {
+                        var u = new Underline();
+                        u.Inlines.Add(r);
+                        p.Inlines.Add(u);
+                    }
+                    else
+                    {
+                        p.Inlines.Add(r);
+                    }
                 }
             }
 
@@ -831,13 +853,8 @@ namespace KuroBBS
                 img.Source = bitmapSource;
                 grid.Children.Add(img);
 
-                // Attempt to animate only if image is an animated GIF
-                if (url.EndsWith(".gif", StringComparison.OrdinalIgnoreCase) || url.Contains(".gif?") || url.Contains(".gif&"))
-                {
-                    var cts = new System.Threading.CancellationTokenSource();
-                    _gifCtsList.Add(cts);
-                    var ignoreGif = KuroGifHelper.TryPlayGifAsync(img, url, cts.Token);
-                }
+                // Automatically play animated GIFs with safe decoding and lifecycle management
+                KuroGifHelper.SetGifSource(img, url);
             }
 
             border.Child = grid;

@@ -89,28 +89,40 @@ namespace KuroBBS.Helpers
 
                     if (!string.IsNullOrEmpty(run.Text))
                     {
-                        var r = new Run { Text = run.Text };
-                        if (run.IsBold)
+                        string normalized = run.Text.Replace("\r\n", "\n").Replace("\r", "\n");
+                        string[] lines = normalized.Split('\n');
+                        for (int i = 0; i < lines.Length; i++)
                         {
-                            r.FontWeight = Windows.UI.Text.FontWeights.Bold;
-                        }
-                        if (run.IsItalic)
-                        {
-                            r.FontStyle = Windows.UI.Text.FontStyle.Italic;
-                        }
-                        if (run.FontSize.HasValue && run.FontSize.Value > 0)
-                        {
-                            r.FontSize = run.FontSize.Value;
-                        }
-                        if (!string.IsNullOrEmpty(run.ColorHex))
-                        {
-                            var color = KuroHtmlPostParser.ParseColor(run.ColorHex);
-                            if (color.HasValue)
+                            if (i > 0)
                             {
-                                r.Foreground = new SolidColorBrush(color.Value);
+                                paragraph.Inlines.Add(new LineBreak());
+                            }
+                            if (!string.IsNullOrEmpty(lines[i]))
+                            {
+                                var r = new Run { Text = lines[i] };
+                                if (run.IsBold)
+                                {
+                                    r.FontWeight = Windows.UI.Text.FontWeights.Bold;
+                                }
+                                if (run.IsItalic)
+                                {
+                                    r.FontStyle = Windows.UI.Text.FontStyle.Italic;
+                                }
+                                if (run.FontSize.HasValue && run.FontSize.Value > 0)
+                                {
+                                    r.FontSize = run.FontSize.Value;
+                                }
+                                if (!string.IsNullOrEmpty(run.ColorHex))
+                                {
+                                    var color = KuroHtmlPostParser.ParseColor(run.ColorHex);
+                                    if (color.HasValue)
+                                    {
+                                        r.Foreground = new SolidColorBrush(color.Value);
+                                    }
+                                }
+                                paragraph.Inlines.Add(r);
                             }
                         }
-                        paragraph.Inlines.Add(r);
                     }
                 }
 

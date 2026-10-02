@@ -213,6 +213,47 @@ namespace KuroBBS
             this.Frame.Navigate(typeof(SettingsPage));
         }
 
+        private void OnGoToSignInClick(object sender, RoutedEventArgs e)
+        {
+            if (MainPivot != null && MainPivot.Items != null)
+            {
+                foreach (var item in MainPivot.Items)
+                {
+                    var pivotItem = item as PivotItem;
+                    if (pivotItem != null && object.Equals(pivotItem.Header, "签到"))
+                    {
+                        MainPivot.SelectedItem = pivotItem;
+                        break;
+                    }
+                }
+            }
+        }
+
+        private async void OnFollowCommendClick(object sender, RoutedEventArgs e)
+        {
+            var btn = sender as Button;
+            if (btn == null) return;
+            var item = btn.Tag as CommendFollowItem;
+            if (item == null || string.IsNullOrEmpty(item.UserId)) return;
+
+            bool targetFollow = !item.IsFollow;
+            bool success = await KuroBBS.Services.KuroUserService.Instance.FollowUserAsync(item.UserId, targetFollow);
+            if (success)
+            {
+                item.IsFollow = targetFollow;
+            }
+        }
+
+        private void OnSelectMingChaoClick(object sender, RoutedEventArgs e)
+        {
+            if (ViewModel != null) ViewModel.SelectedGameId = 3;
+        }
+
+        private void OnSelectZhanShuangClick(object sender, RoutedEventArgs e)
+        {
+            if (ViewModel != null) ViewModel.SelectedGameId = 2;
+        }
+
         private void OnMyProfileTapped(object sender, TappedRoutedEventArgs e)
         {
             if (ViewModel != null && ViewModel.Profile != null && !string.IsNullOrEmpty(ViewModel.Profile.UserId))
@@ -237,6 +278,86 @@ namespace KuroBBS
             if (post != null)
             {
                 this.Frame.Navigate(typeof(PostDetailPage), post);
+            }
+        }
+
+        private async void OnGameWikiItemClick(object sender, ItemClickEventArgs e)
+        {
+            var item = e.ClickedItem as GameWikiItem;
+            if (item == null) return;
+
+            // 1. Daily Sign-in redirection to Sign-in Pivot
+            if (item.WikiName == "每日签到" || item.WikiName == "每日补给" || item.WikiName.Contains("签到") || item.WikiName.Contains("补给"))
+            {
+                OnGoToSignInClick(null, null);
+                return;
+            }
+
+            // 2. Post Detail navigation (wikiType == 1 or has PostId)
+            if (!string.IsNullOrEmpty(item.PostId))
+            {
+                var post = new PostItem
+                {
+                    PostId = item.PostId,
+                    Title = !string.IsNullOrEmpty(item.PostTitle) ? item.PostTitle : item.WikiName,
+                    GameId = item.GameId
+                };
+                this.Frame.Navigate(typeof(PostDetailPage), post);
+                return;
+            }
+
+            // 3. Native Built-in page navigations
+            if (item.WikiName == "WIKI" || item.WikiName.ToUpper().Contains("WIKI") || (!string.IsNullOrEmpty(item.Url) && item.Url.Contains("wiki.kurobbs.com")))
+            {
+                int gameId = item.GameId > 0 ? item.GameId : (ViewModel != null ? ViewModel.SelectedGameId : 2);
+                if (gameId == 3)
+                {
+                    this.Frame.Navigate(typeof(GameWikiMcPage));
+                }
+                else
+                {
+                    this.Frame.Navigate(typeof(GameWikiPnsPage));
+                }
+                return;
+            }
+
+            if (item.WikiName == "编队推荐")
+            {
+                this.Frame.Navigate(typeof(TeamRecommendationPage));
+                return;
+            }
+            if (item.WikiName == "作战数据" || item.WikiName == "数据终端" || item.WikiName.Contains("作战数据") || item.WikiName.Contains("数据终端"))
+            {
+                var role = ViewModel != null ? ViewModel.SelectedRole : null;
+                if (role == null && ViewModel != null && ViewModel.Roles != null && ViewModel.Roles.Count > 0)
+                {
+                    foreach (var r in ViewModel.Roles)
+                    {
+                        if (r.GameId == item.GameId || r.GameId == ViewModel.SelectedGameId)
+                        {
+                            role = r;
+                            break;
+                        }
+                    }
+                    if (role == null) role = ViewModel.Roles[0];
+                }
+
+                this.Frame.Navigate(typeof(DetailPage), role);
+                return;
+            }
+
+            // 4. Web URL / Tool
+            string targetUrl = !string.IsNullOrEmpty(item.Url) ? item.Url : item.CustomSchemeUrl;
+            if (!string.IsNullOrEmpty(targetUrl))
+            {
+                try
+                {
+                    await Windows.System.Launcher.LaunchUriAsync(new Uri(targetUrl));
+                }
+                catch (Exception ex)
+                {
+                    KuroBBS.Services.KuroLogger.Error("LAUNCH_WIKI_URL_ERROR", "Failed to launch url: " + targetUrl + ", ex: " + ex.Message);
+                }
             }
         }
 
@@ -269,10 +390,7 @@ namespace KuroBBS
             {
                 ViewModel.SelectedRole = role;
                 KuroBBS.Services.KuroLogger.Info("ROLE_SWITCH", "User tapped role card: " + role.RoleName + " (" + role.ServerName + ")");
-                if (role.GameId == 2)
-                {
-                    this.Frame.Navigate(typeof(DetailPage), role);
-                }
+                this.Frame.Navigate(typeof(DetailPage), role);
             }
         }
 

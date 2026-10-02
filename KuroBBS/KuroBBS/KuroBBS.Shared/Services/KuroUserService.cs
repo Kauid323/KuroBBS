@@ -72,6 +72,7 @@ namespace KuroBBS.Services
                 profile.FansCount = (int)GetNumber(userObj, "fansCount", 0);
                 profile.PostCount = (int)GetNumber(userObj, "postCount", 0);
                 profile.LikeCount = (int)GetNumber(userObj, "likeCount", 0);
+                profile.GoldCount = (int)GetNumber(userObj, "goldNum", (int)GetNumber(data, "goldNum", 0));
                 profile.IsFollow = GetNumber(userObj, "isFollow", 0) == 1 || GetBool(userObj, "isFollow", false);
                 bool isSelf = !string.IsNullOrEmpty(SettingsHelper.UserId) && (profile.UserId == SettingsHelper.UserId);
                 profile.IsLoginUser = isSelf;
@@ -83,11 +84,6 @@ namespace KuroBBS.Services
                     SettingsHelper.UserId = profile.UserId;
                     SettingsHelper.UserName = profile.UserName;
                 }
-            }
-
-            if (profile.IsLoginUser)
-            {
-                profile.GoldCount = await KuroSignInService.Instance.GetTotalGoldAsync();
             }
 
             return profile;

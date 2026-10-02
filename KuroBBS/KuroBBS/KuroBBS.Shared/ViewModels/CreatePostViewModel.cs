@@ -221,6 +221,143 @@ namespace KuroBBS.ViewModels
             UpdateForumCategories();
         }
 
+        private readonly ObservableCollection<TopicItem> _selectedTopics = new ObservableCollection<TopicItem>();
+        public ObservableCollection<TopicItem> SelectedTopics
+        {
+            get { return _selectedTopics; }
+        }
+
+        public bool HasSelectedTopics
+        {
+            get { return _selectedTopics.Count > 0; }
+        }
+
+        public void AddSelectedTopic(TopicItem topic)
+        {
+            if (topic == null) return;
+            if (_selectedTopics.Any(t => t.TopicId == topic.TopicId))
+            {
+                NotificationHelper.ShowNotification("已添加该话题");
+                return;
+            }
+            if (_selectedTopics.Count >= 5)
+            {
+                NotificationHelper.ShowNotification("最多只能添加5个话题");
+                return;
+            }
+            _selectedTopics.Add(topic);
+            OnPropertyChanged("HasSelectedTopics");
+        }
+
+        public void RemoveSelectedTopic(TopicItem topic)
+        {
+            if (topic != null && _selectedTopics.Contains(topic))
+            {
+                _selectedTopics.Remove(topic);
+                OnPropertyChanged("HasSelectedTopics");
+            }
+        }
+
+        private readonly ObservableCollection<TopicItem> _availableTopics = new ObservableCollection<TopicItem>();
+        public ObservableCollection<TopicItem> AvailableTopics
+        {
+            get { return _availableTopics; }
+        }
+
+        public bool HasAvailableTopics
+        {
+            get { return _availableTopics.Count > 0; }
+        }
+
+        private bool _isLoadingTopics = false;
+        public bool IsLoadingTopics
+        {
+            get { return _isLoadingTopics; }
+            set
+            {
+                if (_isLoadingTopics != value)
+                {
+                    _isLoadingTopics = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        private string _topicSearchKeyword = "";
+        public string TopicSearchKeyword
+        {
+            get { return _topicSearchKeyword; }
+            set
+            {
+                if (_topicSearchKeyword != value)
+                {
+                    _topicSearchKeyword = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public async Task LoadHotTopicsAsync(int gameId, bool force = false)
+        {
+            if (!force && _availableTopics.Count > 0 && string.IsNullOrEmpty(_topicSearchKeyword)) return;
+
+            IsLoadingTopics = true;
+            try
+            {
+                var topics = await KuroForumService.Instance.GetTopicHotListAsync(gameId, type: 2, pageIndex: 1, pageSize: 20);
+                _availableTopics.Clear();
+                if (topics != null)
+                {
+                    foreach (var t in topics)
+                    {
+                        _availableTopics.Add(t);
+                    }
+                }
+                OnPropertyChanged("HasAvailableTopics");
+            }
+            catch (Exception ex)
+            {
+                KuroLogger.Error("LOAD_HOT_TOPICS_ERR", "Failed to load hot topics: " + ex.Message, ex);
+            }
+            finally
+            {
+                IsLoadingTopics = false;
+            }
+        }
+
+        public async Task SearchTopicsAsync(string keyword)
+        {
+            TopicSearchKeyword = keyword;
+            if (string.IsNullOrWhiteSpace(keyword))
+            {
+                await LoadHotTopicsAsync(_selectedGameId, force: true);
+                return;
+            }
+
+            IsLoadingTopics = true;
+            try
+            {
+                var topics = await KuroForumService.Instance.SearchTopicsAsync(_selectedGameId, keyword, pageIndex: 1, pageSize: 20);
+                _availableTopics.Clear();
+                if (topics != null)
+                {
+                    foreach (var t in topics)
+                    {
+                        _availableTopics.Add(t);
+                    }
+                }
+                OnPropertyChanged("HasAvailableTopics");
+            }
+            catch (Exception ex)
+            {
+                KuroLogger.Error("SEARCH_TOPICS_ERR", "Failed to search topics: " + ex.Message, ex);
+            }
+            finally
+            {
+                IsLoadingTopics = false;
+            }
+        }
+
         public async Task InitializeAsync()
         {
             try
@@ -235,6 +372,8 @@ namespace KuroBBS.ViewModels
                 {
                     SelectedEmojiPackage = _emojiPackages[0];
                 }
+
+                await LoadHotTopicsAsync(_selectedGameId);
             }
             catch (Exception ex)
             {
@@ -480,7 +619,8 @@ namespace KuroBBS.ViewModels
                     _selectedGameId,
                     _selectedForum.ForumId,
                     _content,
-                    _attachedImages.ToList()
+                    _attachedImages.ToList(),
+                    _selectedTopics.ToList()
                 );
 
                 if (res != null && res.Success)

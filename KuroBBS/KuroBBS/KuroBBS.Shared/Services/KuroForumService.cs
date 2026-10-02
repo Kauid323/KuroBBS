@@ -309,7 +309,75 @@ namespace KuroBBS.Services
                 post.GameId = (int)GetNumber(obj, "gameId", defaultGameId);
                 post.GameName = post.GameId == 2 ? "战双帕弥什" : post.GameId == 3 ? "鸣潮" : GetString(obj, "gameName", "综合");
                 post.Title = GetString(obj, "postTitle", GetString(obj, "title", ""));
-                post.FullContent = GetString(obj, "postContent", "");
+                // Content summary & text extraction
+                string rawPostContent = GetString(obj, "postContent", "");
+                string cleanTextContent = "";
+                var seenImgUrls = new HashSet<string>();
+
+                if (!string.IsNullOrEmpty(rawPostContent))
+                {
+                    if (rawPostContent.TrimStart().StartsWith("["))
+                    {
+                        try
+                        {
+                            JsonArray contentArr;
+                            if (JsonArray.TryParse(rawPostContent, out contentArr))
+                            {
+                                var sb = new System.Text.StringBuilder();
+                                foreach (var blockVal in contentArr)
+                                {
+                                    if (blockVal.ValueType != JsonValueType.Object) continue;
+                                    var bObj = blockVal.GetObject();
+                                    int cType = (int)GetNumber(bObj, "contentType", 1);
+                                    if (cType == 1) // text
+                                    {
+                                        if (bObj.ContainsKey("children") && bObj.GetNamedValue("children").ValueType == JsonValueType.Array)
+                                        {
+                                            var children = bObj.GetNamedArray("children");
+                                            foreach (var chVal in children)
+                                            {
+                                                if (chVal.ValueType != JsonValueType.Object) continue;
+                                                var chObj = chVal.GetObject();
+                                                string cText = GetString(chObj, "content", "");
+                                                if (!string.IsNullOrEmpty(cText)) sb.Append(cText);
+                                            }
+                                        }
+                                        else
+                                        {
+                                            string cText = GetString(bObj, "content", "");
+                                            if (!string.IsNullOrEmpty(cText)) sb.Append(cText);
+                                        }
+                                        sb.AppendLine();
+                                    }
+                                    else if (cType == 2) // image in postContent
+                                    {
+                                        string imgUrl = GetString(bObj, "url", "");
+                                        if (!string.IsNullOrEmpty(imgUrl) && !seenImgUrls.Contains(imgUrl))
+                                        {
+                                            seenImgUrls.Add(imgUrl);
+                                            if (string.IsNullOrEmpty(post.CoverUrl)) post.CoverUrl = imgUrl;
+                                            post.ImageList.Add(new PostImage
+                                            {
+                                                Url = imgUrl,
+                                                Width = (int)GetNumber(bObj, "imgWidth", 0),
+                                                Height = (int)GetNumber(bObj, "imgHeight", 0)
+                                            });
+                                        }
+                                    }
+                                }
+                                cleanTextContent = sb.ToString().Trim();
+                            }
+                        }
+                        catch { }
+                    }
+
+                    if (string.IsNullOrEmpty(cleanTextContent))
+                    {
+                        cleanTextContent = KuroPostPublishHelper.StripHtml(rawPostContent);
+                    }
+                }
+
+                post.FullContent = !string.IsNullOrEmpty(cleanTextContent) ? cleanTextContent : rawPostContent;
                 post.ContentSummary = !string.IsNullOrEmpty(post.FullContent) ? post.FullContent : post.Title;
                 if (string.IsNullOrEmpty(post.Title)) post.Title = post.ContentSummary;
 
@@ -333,6 +401,7 @@ namespace KuroBBS.Services
                     post.Author.UserId = GetString(uObj, "userId", post.Author.UserId);
                     post.Author.UserName = GetString(uObj, "userName", post.Author.UserName);
                     var uHead = GetString(uObj, "headUrl", GetString(uObj, "userHeadUrl", GetString(uObj, "avatarUrl", "")));
+                    if (!string.IsNullOrEmpty(uHead)) post.Author.AvatarUrl = uHead;
                     post.Author.IpRegion = GetString(uObj, "ipRegion", post.Author.IpRegion);
                 }
 
@@ -358,12 +427,20 @@ namespace KuroBBS.Services
                         if (!string.IsNullOrEmpty(u))
                         {
                             if (string.IsNullOrEmpty(post.CoverUrl)) post.CoverUrl = u;
-                            post.ImageList.Add(new PostImage { Url = u });
+                            if (!seenImgUrls.Contains(u))
+                            {
+                                seenImgUrls.Add(u);
+                                post.ImageList.Add(new PostImage { 
+                                    Url = u,
+                                    Width = (int)GetNumber(cObj, "imgWidth", 0),
+                                    Height = (int)GetNumber(cObj, "imgHeight", 0)
+                                });
+                            }
                         }
                     }
                 }
 
-                // Parse imgContent if cover is not found
+                // Parse imgContent if cover is not found or extra images exist
                 if (obj.ContainsKey("imgContent") && obj.GetNamedValue("imgContent").ValueType == JsonValueType.Array)
                 {
                     var imgs = obj.GetNamedArray("imgContent");
@@ -375,7 +452,37 @@ namespace KuroBBS.Services
                         if (!string.IsNullOrEmpty(u))
                         {
                             if (string.IsNullOrEmpty(post.CoverUrl)) post.CoverUrl = u;
-                            post.ImageList.Add(new PostImage { Url = u });
+                            if (!seenImgUrls.Contains(u))
+                            {
+                                seenImgUrls.Add(u);
+                                post.ImageList.Add(new PostImage { 
+                                    Url = u,
+                                    Width = (int)GetNumber(iObj, "imgWidth", 0),
+                                    Height = (int)GetNumber(iObj, "imgHeight", 0)
+                                });
+                            }
+                        }
+                    }
+                }
+
+                // Parse topicList
+                if (obj.ContainsKey("topicList") && obj.GetNamedValue("topicList").ValueType == JsonValueType.Array)
+                {
+                    var topics = obj.GetNamedArray("topicList");
+                    foreach (var tVal in topics)
+                    {
+                        if (tVal.ValueType != JsonValueType.Object) continue;
+                        var tObj = tVal.GetObject();
+                        string tName = GetString(tObj, "topicName", "");
+                        string tId = GetString(tObj, "topicId", "");
+                        if (!string.IsNullOrEmpty(tName))
+                        {
+                            post.Topics.Add(new TopicItem
+                            {
+                                TopicId = tId,
+                                TopicName = tName,
+                                GameId = post.GameId
+                            });
                         }
                     }
                 }
@@ -704,6 +811,91 @@ namespace KuroBBS.Services
                         });
                     }
                 }
+
+                // Parse Topics / Tags
+                var topicList = new List<TopicItem>();
+                var seenTopicNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                if (obj.ContainsKey("topicList") && obj.GetNamedValue("topicList").ValueType == JsonValueType.Array)
+                {
+                    var tArray = obj.GetNamedArray("topicList");
+                    foreach (var tVal in tArray)
+                    {
+                        if (tVal.ValueType != JsonValueType.Object) continue;
+                        var tObj = tVal.GetObject();
+                        var topic = new TopicItem
+                        {
+                            TopicId = GetString(tObj, "topicId", GetString(tObj, "id", "")),
+                            TopicName = GetString(tObj, "topicName", GetString(tObj, "name", "")).Trim().TrimStart('#').TrimEnd('#'),
+                            TopicIcon = GetString(tObj, "topicIcon", GetString(tObj, "icon", "")),
+                            GameId = (int)GetNumber(tObj, "gameId", post.GameId)
+                        };
+                        if (!string.IsNullOrEmpty(topic.TopicName) && !seenTopicNames.Contains(topic.TopicName))
+                        {
+                            seenTopicNames.Add(topic.TopicName);
+                            topicList.Add(topic);
+                        }
+                    }
+                }
+                else if (obj.ContainsKey("topics") && obj.GetNamedValue("topics").ValueType == JsonValueType.Array)
+                {
+                    var tArray = obj.GetNamedArray("topics");
+                    foreach (var tVal in tArray)
+                    {
+                        if (tVal.ValueType != JsonValueType.Object) continue;
+                        var tObj = tVal.GetObject();
+                        var topic = new TopicItem
+                        {
+                            TopicId = GetString(tObj, "topicId", GetString(tObj, "id", "")),
+                            TopicName = GetString(tObj, "topicName", GetString(tObj, "name", "")).Trim().TrimStart('#').TrimEnd('#'),
+                            TopicIcon = GetString(tObj, "topicIcon", GetString(tObj, "icon", "")),
+                            GameId = (int)GetNumber(tObj, "gameId", post.GameId)
+                        };
+                        if (!string.IsNullOrEmpty(topic.TopicName) && !seenTopicNames.Contains(topic.TopicName))
+                        {
+                            seenTopicNames.Add(topic.TopicName);
+                            topicList.Add(topic);
+                        }
+                    }
+                }
+                else if (obj.ContainsKey("topicVo") && obj.GetNamedValue("topicVo").ValueType == JsonValueType.Object)
+                {
+                    var tObj = obj.GetNamedObject("topicVo");
+                    var topic = new TopicItem
+                    {
+                        TopicId = GetString(tObj, "topicId", GetString(tObj, "id", "")),
+                        TopicName = GetString(tObj, "topicName", GetString(tObj, "name", "")).Trim().TrimStart('#').TrimEnd('#'),
+                        TopicIcon = GetString(tObj, "topicIcon", GetString(tObj, "icon", "")),
+                        GameId = (int)GetNumber(tObj, "gameId", post.GameId)
+                    };
+                    if (!string.IsNullOrEmpty(topic.TopicName) && !seenTopicNames.Contains(topic.TopicName))
+                    {
+                        seenTopicNames.Add(topic.TopicName);
+                        topicList.Add(topic);
+                    }
+                }
+
+                // Fallback / Supplementary: extract hashtag patterns (#话题#) from FullContent
+                if (!string.IsNullOrEmpty(post.FullContent))
+                {
+                    var hashMatches = System.Text.RegularExpressions.Regex.Matches(post.FullContent, @"#([^#\s\r\n]{2,30})#");
+                    foreach (System.Text.RegularExpressions.Match hm in hashMatches)
+                    {
+                        string tName = hm.Groups[1].Value.Trim();
+                        if (!string.IsNullOrEmpty(tName) && !seenTopicNames.Contains(tName))
+                        {
+                            seenTopicNames.Add(tName);
+                            topicList.Add(new TopicItem
+                            {
+                                TopicId = "",
+                                TopicName = tName,
+                                GameId = post.GameId
+                            });
+                        }
+                    }
+                }
+
+                post.Topics = topicList;
 
                 return post;
             }
@@ -1140,10 +1332,10 @@ namespace KuroBBS.Services
             return result;
         }
 
-        public async Task<List<TopicItem>> GetTopicHotListAsync(int gameId, int pageIndex = 1, int pageSize = 20)
+        public async Task<List<TopicItem>> GetTopicHotListAsync(int gameId, int type = 4, int pageIndex = 1, int pageSize = 20)
         {
             var list = new List<TopicItem>();
-            var json = await KuroApiClient.Instance.GetAsync(string.Format("/forum/app/topic/hotlist?type=4&pageIndex={0}&pageSize={1}&gameId={2}", pageIndex, pageSize, gameId));
+            var json = await KuroApiClient.Instance.GetAsync(string.Format("/forum/app/topic/hotlist?type={0}&pageIndex={1}&pageSize={2}&gameId={3}", type, pageIndex, pageSize, gameId));
             if (json != null && json.ContainsKey("data") && json.GetNamedValue("data").ValueType == JsonValueType.Array)
             {
                 var arr = json.GetNamedArray("data");
@@ -1166,6 +1358,56 @@ namespace KuroBBS.Services
                         });
                     }
                 }
+            }
+            return list;
+        }
+
+        public async Task<List<GameWikiItem>> GetGameWikiListAsync(int gameId)
+        {
+            var list = new List<GameWikiItem>();
+            try
+            {
+                var json = await KuroApiClient.Instance.PostFormAsync("/config/getGameWiki", new Dictionary<string, string>());
+                if (json != null && json.ContainsKey("data") && json.GetNamedValue("data").ValueType == JsonValueType.Object)
+                {
+                    var data = json.GetNamedObject("data");
+                    if (data.ContainsKey("gameWikiVoMap") && data.GetNamedValue("gameWikiVoMap").ValueType == JsonValueType.Object)
+                    {
+                        var voMap = data.GetNamedObject("gameWikiVoMap");
+                        string key = gameId.ToString();
+                        if (voMap.ContainsKey(key) && voMap.GetNamedValue(key).ValueType == JsonValueType.Array)
+                        {
+                            var arr = voMap.GetNamedArray(key);
+                            foreach (var item in arr)
+                            {
+                                if (item.ValueType == JsonValueType.Object)
+                                {
+                                    var o = item.GetObject();
+                                    list.Add(new GameWikiItem
+                                    {
+                                        Id = o.ContainsKey("id") ? (int)o.GetNamedNumber("id") : 0,
+                                        WikiName = o.ContainsKey("wikiName") ? o.GetNamedString("wikiName") : "",
+                                        WikiType = o.ContainsKey("wikiType") ? (int)o.GetNamedNumber("wikiType") : 2,
+                                        IconUrl = o.ContainsKey("iconUrl") ? o.GetNamedString("iconUrl") : "",
+                                        WebIconUrl = o.ContainsKey("webIconUrl") ? o.GetNamedString("webIconUrl") : "",
+                                        Url = o.ContainsKey("url") ? o.GetNamedString("url") : "",
+                                        CustomSchemeUrl = o.ContainsKey("customSchemeUrl") ? o.GetNamedString("customSchemeUrl") : "",
+                                        PostId = o.ContainsKey("postId") ? o.GetNamedString("postId") : "",
+                                        PostTitle = o.ContainsKey("postTitle") ? o.GetNamedString("postTitle") : "",
+                                        ShowRedPoint = o.ContainsKey("showRedPoint") ? o.GetNamedBoolean("showRedPoint") : false,
+                                        AppForce = o.ContainsKey("appForce") ? o.GetNamedBoolean("appForce") : false,
+                                        IsNeedToken = o.ContainsKey("isNeedToken") ? (int)o.GetNamedNumber("isNeedToken") : 0,
+                                        GameId = gameId
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                KuroLogger.Error("GET_GAME_WIKI_ERROR", "Failed to fetch game wiki list: " + ex.Message);
             }
             return list;
         }
@@ -1296,8 +1538,23 @@ namespace KuroBBS.Services
         public async Task<List<TopicItem>> SearchTopicsAsync(int gameId, string keyword, int pageIndex = 1, int pageSize = 20)
         {
             var list = new List<TopicItem>();
-            var json = await KuroApiClient.Instance.GetAsync(string.Format("/forum/app/topic/searchTopic?gameId={0}&keyword={1}&pageIndex={2}&pageSize={3}", 
-                gameId, Uri.EscapeDataString(keyword ?? ""), pageIndex, pageSize));
+            string encodedKeyword = Uri.EscapeDataString(keyword ?? "");
+            
+            // Try /forum/app/topic/search first
+            var json = await KuroApiClient.Instance.GetAsync(string.Format("/forum/app/topic/search?gameId={0}&keyword={1}&pageIndex={2}&pageSize={3}", 
+                gameId, encodedKeyword, pageIndex, pageSize));
+
+            // Fallback to /forum/app/topic/searchTopic if /search returned null/no data
+            if (json == null || !json.ContainsKey("data") || json.GetNamedValue("data").ValueType != JsonValueType.Array || json.GetNamedArray("data").Count == 0)
+            {
+                var fallbackJson = await KuroApiClient.Instance.GetAsync(string.Format("/forum/app/topic/searchTopic?gameId={0}&keyword={1}&pageIndex={2}&pageSize={3}", 
+                    gameId, encodedKeyword, pageIndex, pageSize));
+                if (fallbackJson != null && fallbackJson.ContainsKey("data") && fallbackJson.GetNamedValue("data").ValueType == JsonValueType.Array)
+                {
+                    json = fallbackJson;
+                }
+            }
+
             if (json != null && json.ContainsKey("data") && json.GetNamedValue("data").ValueType == JsonValueType.Array)
             {
                 var arr = json.GetNamedArray("data");
@@ -1391,7 +1648,7 @@ namespace KuroBBS.Services
             return result;
         }
 
-        public async Task<PublishPostResult> PublishPostAsync(string title, int gameId, int gameForumId, string rawContent, List<PostEditorImage> images, string draftId = "")
+        public async Task<PublishPostResult> PublishPostAsync(string title, int gameId, int gameForumId, string rawContent, List<PostEditorImage> images, List<TopicItem> topics = null, string draftId = "")
         {
             var result = new PublishPostResult();
 
@@ -1407,12 +1664,23 @@ namespace KuroBBS.Services
                 return result;
             }
 
-            KuroLogger.Loading("POST_PUBLISH", string.Format("Publishing post: Title='{0}', GameId={1}, ForumId={2}, ImagesCount={3}",
-                title, gameId, gameForumId, images != null ? images.Count : 0));
+            KuroLogger.Loading("POST_PUBLISH", string.Format("Publishing post: Title='{0}', GameId={1}, ForumId={2}, ImagesCount={3}, TopicsCount={4}",
+                title, gameId, gameForumId, images != null ? images.Count : 0, topics != null ? topics.Count : 0));
 
             string contentJson = KuroPostPublishHelper.BuildContentJson(rawContent, images);
             string h5Content = KuroPostPublishHelper.BuildH5Content(rawContent, images);
             string postDraftId = Guid.NewGuid().ToString() + "_" + (long)(DateTime.UtcNow.Subtract(new DateTime(1970, 1, 1))).TotalMilliseconds;
+
+            string topicIdsStr = "";
+            if (topics != null && topics.Count > 0)
+            {
+                var idList = new List<string>();
+                foreach (var t in topics)
+                {
+                    if (!string.IsNullOrEmpty(t.TopicId)) idList.Add(t.TopicId);
+                }
+                topicIdsStr = string.Join(",", idList);
+            }
 
             var parameters = new Dictionary<string, string>
             {
@@ -1427,6 +1695,8 @@ namespace KuroBBS.Services
                 { "draftId", draftId ?? "" },
                 { "postDraftId", postDraftId },
                 { "chatUserIds", "" },
+                { "topicIds", topicIdsStr },
+                { "topicIdList", topicIdsStr },
                 { "content", contentJson },
                 { "h5Content", h5Content },
                 { "newH5Content", h5Content }

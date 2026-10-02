@@ -27,6 +27,12 @@
         <helpers:FollowStateToForegroundConverter x:Key="FollowStateToFgConverter" />
         <helpers:BoolToAccentBrushConverter x:Key="BoolToAccentConverter" />
         <helpers:BoolToTextBrushConverter x:Key="BoolToTextBrushConverter" />
+        <helpers:LevelToBrushConverter x:Key="LevelToBrushConverter" />
+        <helpers:LevelToBrushConverter x:Key="LevelToBrush" />
+        <helpers:BoolToTagBgBrushConverter x:Key="BoolToTagBgBrushConverter" />
+        <helpers:BoolToTagBgBrushConverter x:Key="BoolToTagBgBrush" />
+        <helpers:BoolToTagBorderBrushConverter x:Key="BoolToTagBorderBrushConverter" />
+        <helpers:BoolToTagBorderBrushConverter x:Key="BoolToTagBorderBrush" />
         <helpers:InverseBooleanToVisibilityConverter x:Key="InvertedBoolToVisConverter" />
         <helpers:InverseBooleanToVisibilityConverter x:Key="BoolToCollapseConverter" />
 

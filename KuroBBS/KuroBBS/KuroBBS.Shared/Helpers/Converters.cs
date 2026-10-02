@@ -147,6 +147,10 @@ namespace KuroBBS.Helpers
         {
             if (value == null) return Visibility.Collapsed;
             if (value is string && string.IsNullOrWhiteSpace((string)value)) return Visibility.Collapsed;
+            if (value is int && (int)value == 0) return Visibility.Collapsed;
+            if (value is long && (long)value == 0) return Visibility.Collapsed;
+            if (value is double && (double)value == 0) return Visibility.Collapsed;
+            if (value is System.Collections.ICollection && ((System.Collections.ICollection)value).Count == 0) return Visibility.Collapsed;
             return Visibility.Visible;
         }
 
@@ -162,6 +166,10 @@ namespace KuroBBS.Helpers
         {
             if (value == null) return Visibility.Visible;
             if (value is string && string.IsNullOrWhiteSpace((string)value)) return Visibility.Visible;
+            if (value is int && (int)value == 0) return Visibility.Visible;
+            if (value is long && (long)value == 0) return Visibility.Visible;
+            if (value is double && (double)value == 0) return Visibility.Visible;
+            if (value is System.Collections.ICollection && ((System.Collections.ICollection)value).Count == 0) return Visibility.Visible;
             return Visibility.Collapsed;
         }
 
@@ -270,5 +278,63 @@ namespace KuroBBS.Helpers
             throw new NotImplementedException();
         }
     }
+
+    public class LevelToBrushConverter : IValueConverter
+    {
+        private static readonly Windows.UI.Xaml.Media.SolidColorBrush GoldBrush = new Windows.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 255, 215, 0));
+        private static readonly Windows.UI.Xaml.Media.SolidColorBrush PurpleBrush = new Windows.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 163, 53, 238));
+        private static readonly Windows.UI.Xaml.Media.SolidColorBrush BlueBrush = new Windows.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 0, 112, 221));
+        private static readonly Windows.UI.Xaml.Media.SolidColorBrush DefaultBrush = new Windows.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 0, 122, 204));
+
+        public object Convert(object value, Type targetType, object parameter, string language)
+        {
+            if (value == null) return DefaultBrush;
+            string lvl = value.ToString();
+            if (lvl == "S" || lvl == "5★" || lvl == "SSR" || lvl == "金色" || lvl == "6★") return GoldBrush;
+            if (lvl == "A" || lvl == "4★" || lvl == "SR" || lvl == "紫色" || lvl == "5星") return PurpleBrush;
+            if (lvl == "B" || lvl == "3★" || lvl == "R" || lvl == "蓝色" || lvl == "4星") return BlueBrush;
+            return DefaultBrush;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, string language)
+        {
+            throw new NotImplementedException();
+        }
+    }
+
+    public class BoolToTagBgBrushConverter : IValueConverter
+    {
+        private static readonly Windows.UI.Xaml.Media.SolidColorBrush SelectedBrush = new Windows.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 0, 122, 204));
+        private static readonly Windows.UI.Xaml.Media.SolidColorBrush UnselectedBrush = new Windows.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 30, 30, 38));
+
+        public object Convert(object value, Type targetType, object parameter, string language)
+        {
+            if (value is bool && (bool)value) return SelectedBrush;
+            return UnselectedBrush;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, string language)
+        {
+            throw new NotImplementedException();
+        }
+    }
+
+    public class BoolToTagBorderBrushConverter : IValueConverter
+    {
+        private static readonly Windows.UI.Xaml.Media.SolidColorBrush SelectedBrush = new Windows.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 0, 163, 255));
+        private static readonly Windows.UI.Xaml.Media.SolidColorBrush UnselectedBrush = new Windows.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 56, 56, 72));
+
+        public object Convert(object value, Type targetType, object parameter, string language)
+        {
+            if (value is bool && (bool)value) return SelectedBrush;
+            return UnselectedBrush;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, string language)
+        {
+            throw new NotImplementedException();
+        }
+    }
 }
+
 

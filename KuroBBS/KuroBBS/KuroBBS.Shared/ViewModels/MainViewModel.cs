@@ -39,6 +39,31 @@ namespace KuroBBS.ViewModels
             set { _roles = value; OnPropertyChanged(); }
         }
 
+        private ObservableCollection<GameWikiItem> _gameWikiList;
+        public ObservableCollection<GameWikiItem> GameWikiList
+        {
+            get { return _gameWikiList; }
+            set { _gameWikiList = value; OnPropertyChanged(); }
+        }
+
+        private ObservableCollection<SignInClaimRecord> _signInClaimRecords;
+        public ObservableCollection<SignInClaimRecord> SignInClaimRecords
+        {
+            get { return _signInClaimRecords; }
+            set { _signInClaimRecords = value; OnPropertyChanged(); OnPropertyChanged("HasSignInClaimRecords"); }
+        }
+
+        public bool HasSignInClaimRecords { get { return _signInClaimRecords != null && _signInClaimRecords.Count > 0; } }
+
+        private ObservableCollection<CommendFollowItem> _commendFollows;
+        public ObservableCollection<CommendFollowItem> CommendFollows
+        {
+            get { return _commendFollows; }
+            set { _commendFollows = value; OnPropertyChanged(); OnPropertyChanged("HasCommendFollows"); }
+        }
+
+        public bool HasCommendFollows { get { return _commendFollows != null && _commendFollows.Count > 0; } }
+
         private SignInStatus _signInInfo;
         public SignInStatus SignInInfo
         {
@@ -361,6 +386,9 @@ namespace KuroBBS.ViewModels
             CommunityPosts = new ObservableCollection<PostItem>();
             NewsList = new ObservableCollection<PostItem>();
             Roles = new ObservableCollection<GameRoleCard>();
+            GameWikiList = new ObservableCollection<GameWikiItem>();
+            SignInClaimRecords = new ObservableCollection<SignInClaimRecord>();
+            CommendFollows = new ObservableCollection<CommendFollowItem>();
             SignInInfo = new SignInStatus { GameName = "鸣潮", ConsecutiveDays = 0 };
             Profile = new UserProfile { UserName = SettingsHelper.UserName, IsLoggedIn = SettingsHelper.IsLoggedIn };
             _selectedGameId = SettingsHelper.DefaultGameId;
@@ -384,7 +412,6 @@ namespace KuroBBS.ViewModels
                             if (r.GameId == gId) { _selectedRole = r; OnPropertyChanged("SelectedRole"); OnPropertyChanged("SelectedRoleDisplayName"); OnPropertyChanged("HasSelectedRole"); break; }
                         }
                     }
-                    await ReloadFeedsAsync();
                     await LoadSignInInfoAsync();
                 }
             });
@@ -550,7 +577,32 @@ namespace KuroBBS.ViewModels
         {
             var t1 = LoadCommunityPostsAsync(true);
             var t2 = LoadNewsListAsync(true);
-            await Task.WhenAll(t1, t2);
+            var t3 = LoadGameWikiAsync();
+            await Task.WhenAll(t1, t2, t3);
+        }
+
+        public async Task LoadGameWikiAsync()
+        {
+            try
+            {
+                var list = await KuroForumService.Instance.GetGameWikiListAsync(SelectedGameId);
+                await RunOnUIThread(() =>
+                {
+                    GameWikiList.Clear();
+                    if (list != null)
+                    {
+                        foreach (var item in list)
+                        {
+                            GameWikiList.Add(item);
+                        }
+                    }
+                });
+                KuroLogger.Loading("GAME_WIKI_LOAD", string.Format("Loaded {0} wiki/tool items for GameId: {1}", GameWikiList.Count, SelectedGameId));
+            }
+            catch (Exception ex)
+            {
+                KuroLogger.Error("LOAD_GAME_WIKI_ERROR", "Error loading game wiki: " + ex.Message);
+            }
         }
 
         private int GetActualForumId()
@@ -598,7 +650,16 @@ namespace KuroBBS.ViewModels
             try
             {
                 int forumId = GetActualForumId();
-                var list = await KuroForumService.Instance.GetCommunityPostsAsync(SelectedGameId, forumId, SelectedSearchType, _communityPage, 20);
+                int searchType = SelectedSearchType;
+                if (SelectedSubForum == 0)
+                {
+                    searchType = 3;
+                }
+                var list = await KuroForumService.Instance.GetCommunityPostsAsync(SelectedGameId, forumId, searchType, _communityPage, 20);
+                if ((list == null || list.Count == 0) && SelectedSubForum == 0 && _communityPage == 1)
+                {
+                    list = await KuroForumService.Instance.GetCommunityPostsAsync(SelectedGameId, forumId, 1, 1, 20);
+                }
                 
                 await RunOnUIThread(() =>
                 {
@@ -759,13 +820,61 @@ namespace KuroBBS.ViewModels
 
             string serverId = role != null ? role.ServerId : "";
             string roleId = role != null ? role.RoleId : "";
+            string userId = Profile != null ? Profile.UserId : "";
 
-            KuroLogger.Loading("SIGNIN_STATUS", string.Format("Querying sign-in status for {0} (Role={1}, Server={2})", SelectedGameName, roleId, serverId));
-            var info = await KuroSignInService.Instance.GetSignInStatusAsync(SelectedGameId, serverId, roleId, Profile != null ? Profile.UserId : "");
-            await RunOnUIThread(() =>
+            KuroLogger.Loading("SIGNIN_STATUS", string.Format("Querying sign-in status, records and commend follows for {0} (Role={1}, Server={2})", SelectedGameName, roleId, serverId));
+            
+            try
             {
-                SignInInfo = info;
-            });
+                var statusTask = KuroSignInService.Instance.GetSignInStatusAsync(SelectedGameId, serverId, roleId, userId);
+                var recordsTask = KuroSignInService.Instance.QuerySignInRecordsAsync(SelectedGameId, serverId, roleId, userId);
+                var followsTask = KuroSignInService.Instance.GetCommendFollowListAsync(SelectedGameId, serverId, roleId, userId);
+
+                await Task.WhenAll(statusTask, recordsTask, followsTask);
+
+                var info = await statusTask;
+                var records = await recordsTask;
+                var follows = await followsTask;
+
+                await RunOnUIThread(() =>
+                {
+                    if (info != null)
+                    {
+                        int claimedCount = records != null ? records.Count : 0;
+                        int totalDays = Math.Max(info.TotalSignInDays, claimedCount);
+                        for (int i = 0; i < info.MonthRecords.Count; i++)
+                        {
+                            if (i < totalDays)
+                            {
+                                info.MonthRecords[i].IsSignedIn = true;
+                            }
+                        }
+                        SignInInfo = info;
+                    }
+                    SignInClaimRecords.Clear();
+                    if (records != null)
+                    {
+                        foreach (var rec in records)
+                        {
+                            SignInClaimRecords.Add(rec);
+                        }
+                    }
+                    CommendFollows.Clear();
+                    if (follows != null)
+                    {
+                        foreach (var f in follows)
+                        {
+                            CommendFollows.Add(f);
+                        }
+                    }
+                    OnPropertyChanged("HasSignInClaimRecords");
+                    OnPropertyChanged("HasCommendFollows");
+                });
+            }
+            catch (Exception ex)
+            {
+                KuroLogger.Error("SIGNIN_LOAD_ERR", "Failed loading sign-in info: " + ex.Message, ex);
+            }
         }
 
         public async Task ExecuteSignInAsync()

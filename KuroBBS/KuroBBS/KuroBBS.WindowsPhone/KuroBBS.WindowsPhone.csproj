@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="12.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
@@ -121,6 +121,21 @@
     <Compile Include="CreatePostPage.xaml.cs">
       <DependentUpon>CreatePostPage.xaml</DependentUpon>
     </Compile>
+    <Compile Include="GameWikiMcPage.xaml.cs">
+      <DependentUpon>GameWikiMcPage.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="GameWikiPnsPage.xaml.cs">
+      <DependentUpon>GameWikiPnsPage.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="WikiCatalogueTreePage.xaml.cs">
+      <DependentUpon>WikiCatalogueTreePage.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="WikiItemListPage.xaml.cs">
+      <DependentUpon>WikiItemListPage.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="WikiEntryDetailPage.xaml.cs">
+      <DependentUpon>WikiEntryDetailPage.xaml</DependentUpon>
+    </Compile>
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
@@ -182,6 +197,26 @@
       <SubType>Designer</SubType>
     </Page>
     <Page Include="CreatePostPage.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="GameWikiMcPage.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="GameWikiPnsPage.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="WikiCatalogueTreePage.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="WikiItemListPage.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="WikiEntryDetailPage.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
